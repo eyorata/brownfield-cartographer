@@ -8,7 +8,12 @@ env.bak/
 venv.bak/
 
 # Project configuration
-.cartography/
+
+# Cartography artifacts
+# Keep these in git for interim/final deliverables, but ignore other generated files under `.cartography/`.
+.cartography/*
+!.cartography/module_graph.json
+!.cartography/lineage_graph.json
 _targets/
 _tmp/
 
