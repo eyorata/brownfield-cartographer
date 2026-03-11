@@ -49,5 +49,30 @@ class DAGConfigParser:
             if not content:
                 return configs
         except Exception as e:
-            pass
+            return configs
+
+        # Extremely lightweight schema for "task graph" YAMLs used in some teams.
+        # Expected shapes (examples):
+        # - {"tasks": [{"id": "a", "depends_on": ["b"]}, ...]}
+        # - {"dag": {"tasks": [{"task_id": "...", "upstream": [...]}, ...]}}
+        tasks = None
+        if isinstance(content, dict):
+            if isinstance(content.get("tasks"), list):
+                tasks = content.get("tasks")
+            elif isinstance(content.get("dag"), dict) and isinstance(content["dag"].get("tasks"), list):
+                tasks = content["dag"].get("tasks")
+
+        if not tasks:
+            return configs
+
+        for task in tasks:
+            if not isinstance(task, dict):
+                continue
+            task_id = task.get("id") or task.get("task_id") or task.get("name")
+            if not task_id:
+                continue
+            depends = task.get("depends_on") or task.get("upstream") or []
+            if not isinstance(depends, list):
+                depends = [depends]
+            configs.append({"type": "task", "id": str(task_id), "depends_on": [str(d) for d in depends]})
         return configs

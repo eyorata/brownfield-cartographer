@@ -33,6 +33,106 @@ class TreeSitterAnalyzer:
         self.router = LanguageRouter()
         self.parser = Parser() if Parser else None
 
+    def _analyze_python_tree_sitter(self, file_path: str) -> Dict[str, Any]:
+        parsed = self._parse(file_path)
+        if not parsed:
+            return {"imports": [], "functions": [], "function_defs": [], "classes": [], "class_defs": [], "data_ops": []}
+
+        tree, content = parsed
+        imports: List[str] = []
+        functions: List[str] = []
+        function_defs: List[Dict[str, Any]] = []
+        classes: List[str] = []
+        class_defs: List[Dict[str, Any]] = []
+        data_ops: List[Dict[str, Any]] = []
+
+        def text(node) -> str:
+            return content[node.start_byte : node.end_byte].decode("utf-8", "ignore")
+
+        def traverse(node, decorators: Optional[List[str]] = None):
+            decorators = decorators or []
+
+            # decorated_definition wraps function_definition/class_definition
+            if node.type == "decorated_definition":
+                decos = []
+                for child in node.children:
+                    if child.type == "decorator":
+                        decos.append(text(child).strip())
+                for child in node.children:
+                    if child.type in ("function_definition", "class_definition"):
+                        traverse(child, decorators=decos)
+                return
+
+            if node.type in ("import_statement", "import_from_statement"):
+                raw = text(node).strip()
+                parts = raw.split()
+                if parts and parts[0] == "import" and len(parts) >= 2:
+                    imports.append(parts[1])
+                elif parts and parts[0] == "from" and len(parts) >= 2:
+                    imports.append(parts[1])
+
+            if node.type == "function_definition":
+                name_node = node.child_by_field_name("name")
+                params_node = node.child_by_field_name("parameters")
+                name = text(name_node).strip() if name_node else ""
+                signature = text(params_node).strip() if params_node else "()"
+                if name and (not name.startswith("_") or name == "__init__"):
+                    functions.append(name)
+                    function_defs.append(
+                        {
+                            "name": name,
+                            "signature": signature,
+                            "decorators": decorators,
+                        }
+                    )
+
+            if node.type == "class_definition":
+                name_node = node.child_by_field_name("name")
+                super_node = node.child_by_field_name("superclasses")
+                name = text(name_node).strip() if name_node else ""
+                bases = text(super_node).strip() if super_node else ""
+                if name:
+                    classes.append(name)
+                    class_defs.append(
+                        {
+                            "name": name,
+                            "bases": bases,
+                            "decorators": decorators,
+                        }
+                    )
+
+            # Simple heuristic for data ops: read_csv, read_sql, execute, read, write
+            if node.type == "call":
+                func_node = node.child_by_field_name("function")
+                args_node = node.child_by_field_name("arguments")
+                func_name = text(func_node).strip() if func_node else ""
+                if func_name and any(k in func_name for k in ("read_csv", "read_sql", "execute", "read", "write")):
+                    data_ops.append(
+                        {
+                            "type": func_name,
+                            "args": text(args_node).strip() if args_node else "",
+                        }
+                    )
+
+            for child in node.children:
+                traverse(child, decorators=decorators)
+
+        traverse(tree.root_node)
+
+        # Normalize imports to module roots (for module graph)
+        clean_imports: List[str] = []
+        for imp in imports:
+            clean_imports.append(imp.split(".")[0])
+
+        return {
+            "imports": sorted(set(clean_imports)),
+            "functions": sorted(set(functions)),
+            "function_defs": function_defs,
+            "classes": sorted(set(classes)),
+            "class_defs": class_defs,
+            "data_ops": data_ops,
+        }
+
     def _analyze_python_ast(self, file_path: str) -> Dict[str, Any]:
         try:
             source = Path(file_path).read_text(encoding="utf-8")
@@ -45,8 +145,11 @@ class TreeSitterAnalyzer:
             return {"imports": [], "functions": [], "classes": [], "data_ops": []}
 
         imports: List[str] = []
+        import_modules: List[Dict[str, Any]] = []
         functions: List[str] = []
+        function_defs: List[Dict[str, Any]] = []
         classes: List[str] = []
+        class_defs: List[Dict[str, Any]] = []
         data_ops: List[Dict[str, str]] = []
 
         for node in ast.walk(tree):
@@ -54,17 +157,29 @@ class TreeSitterAnalyzer:
                 for alias in node.names:
                     if alias.name:
                         imports.append(alias.name)
+                        import_modules.append({"kind": "import", "module": alias.name, "level": 0, "names": []})
             elif isinstance(node, ast.ImportFrom):
                 if node.module:
                     imports.append(node.module)
+                import_modules.append(
+                    {
+                        "kind": "from",
+                        "module": node.module or "",
+                        "level": int(getattr(node, "level", 0) or 0),
+                        "names": [a.name for a in node.names if getattr(a, "name", None)],
+                    }
+                )
             elif isinstance(node, ast.FunctionDef):
                 if not node.name.startswith("_") or node.name == "__init__":
                     functions.append(node.name)
+                    function_defs.append({"name": node.name, "signature": "", "decorators": []})
             elif isinstance(node, ast.AsyncFunctionDef):
                 if not node.name.startswith("_") or node.name == "__init__":
                     functions.append(node.name)
+                    function_defs.append({"name": node.name, "signature": "", "decorators": []})
             elif isinstance(node, ast.ClassDef):
                 classes.append(node.name)
+                class_defs.append({"name": node.name, "bases": "", "decorators": []})
             elif isinstance(node, ast.Call):
                 # Minimal heuristic; details used later by the Hydrologist.
                 func_name = ""
@@ -73,12 +188,23 @@ class TreeSitterAnalyzer:
                 elif isinstance(node.func, ast.Attribute):
                     func_name = node.func.attr
                 if any(k in func_name for k in ("read_csv", "read_sql", "execute", "read", "write")):
-                    data_ops.append({"type": func_name, "args": ""})
+                    try:
+                        args_src = ast.get_source_segment(source, node) or ""
+                    except Exception:
+                        args_src = ""
+                    literals: List[str] = []
+                    for a in list(node.args) + [kw.value for kw in node.keywords if kw.value is not None]:
+                        if isinstance(a, ast.Constant) and isinstance(a.value, str):
+                            literals.append(a.value)
+                    data_ops.append({"type": func_name, "args": args_src, "literals": literals})
 
         return {
             "imports": sorted(set(imports)),
+            "import_modules": import_modules,
             "functions": sorted(set(functions)),
+            "function_defs": function_defs,
             "classes": sorted(set(classes)),
+            "class_defs": class_defs,
             "data_ops": data_ops,
         }
 
@@ -96,14 +222,22 @@ class TreeSitterAnalyzer:
 
     def analyze_python_module(self, file_path: str) -> Dict[str, Any]:
         """Extracts imports, public functions, classes."""
-        # Prefer stdlib AST parsing for Python; it's more robust and doesn't require optional deps.
+        # Prefer tree-sitter when available for richer structural extraction.
+        if self.parser:
+            ts_result = self._analyze_python_tree_sitter(file_path)
+            if ts_result["imports"] or ts_result["functions"] or ts_result["classes"]:
+                # Always merge in AST-based import info for relative import resolution.
+                ast_imports = self._analyze_python_ast(file_path).get("import_modules", [])
+                ts_result["import_modules"] = ast_imports
+                return ts_result
+
         ast_result = self._analyze_python_ast(file_path)
         if ast_result["imports"] or ast_result["functions"] or ast_result["classes"]:
             return ast_result
 
         parsed = self._parse(file_path)
         if not parsed:
-            return {"imports": [], "functions": [], "classes": [], "data_ops": []}
+            return {"imports": [], "functions": [], "function_defs": [], "classes": [], "class_defs": [], "data_ops": []}
         tree, content = parsed
         
         imports = []
@@ -156,7 +290,9 @@ class TreeSitterAnalyzer:
         return {
             "imports": list(set(clean_imports)),
             "functions": functions,
+            "function_defs": [{"name": n, "signature": "", "decorators": []} for n in functions],
             "classes": classes,
+            "class_defs": [{"name": n, "bases": "", "decorators": []} for n in classes],
             "data_ops": data_ops
         }
 
@@ -164,7 +300,70 @@ class TreeSitterAnalyzer:
         return self.analyze_python_module(file_path)
 
     def parse_sql(self, file_path):
-        pass
+        parsed = self._parse(file_path)
+        if not parsed:
+            return {"relations": []}
+        tree, content = parsed
+
+        relations: List[Dict[str, Any]] = []
+
+        def text(node) -> str:
+            return content[node.start_byte : node.end_byte].decode("utf-8", "ignore")
+
+        def traverse(node):
+            # The tree-sitter-sql grammar surfaces table-like references as `relation` nodes.
+            if node.type == "relation":
+                val = text(node).strip()
+                if val:
+                    relations.append(
+                        {
+                            "name": val,
+                            "start": {"row": node.start_point[0] + 1, "col": node.start_point[1] + 1},
+                            "end": {"row": node.end_point[0] + 1, "col": node.end_point[1] + 1},
+                        }
+                    )
+            for child in node.children:
+                traverse(child)
+
+        traverse(tree.root_node)
+        # Stable ordering (by location).
+        relations_sorted = sorted(relations, key=lambda r: (r["start"]["row"], r["start"]["col"], r["name"]))
+        return {"relations": relations_sorted}
         
     def parse_yaml(self, file_path):
-        pass
+        parsed = self._parse(file_path)
+        if not parsed:
+            # Fallback to semantic YAML load when tree-sitter isn't available.
+            try:
+                import yaml  # type: ignore
+
+                data = yaml.safe_load(Path(file_path).read_text(encoding="utf-8"))
+                return {"keys": sorted(list(data.keys())) if isinstance(data, dict) else []}
+            except Exception:
+                return {"keys": []}
+
+        tree, content = parsed
+        key_paths: List[str] = []
+
+        def text(node) -> str:
+            return content[node.start_byte : node.end_byte].decode("utf-8", "ignore")
+
+        def traverse(node, stack: List[str]):
+            # Capture dotted key paths for nested mappings.
+            if node.type == "block_mapping_pair":
+                key_node = node.child_by_field_name("key")
+                value_node = node.child_by_field_name("value")
+                if key_node:
+                    k = text(key_node).strip().strip("'\"")
+                    if k:
+                        path = ".".join(stack + [k]) if stack else k
+                        key_paths.append(path)
+                        if value_node:
+                            traverse(value_node, stack + [k])
+                        return
+
+            for child in node.children:
+                traverse(child, stack)
+
+        traverse(tree.root_node, [])
+        return {"key_paths": sorted(set(key_paths))}
