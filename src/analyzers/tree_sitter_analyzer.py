@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+import ast
 try:
     from tree_sitter import Language, Parser
     import tree_sitter_python
@@ -32,6 +33,55 @@ class TreeSitterAnalyzer:
         self.router = LanguageRouter()
         self.parser = Parser() if Parser else None
 
+    def _analyze_python_ast(self, file_path: str) -> Dict[str, Any]:
+        try:
+            source = Path(file_path).read_text(encoding="utf-8")
+        except Exception:
+            return {"imports": [], "functions": [], "classes": [], "data_ops": []}
+
+        try:
+            tree = ast.parse(source, filename=file_path)
+        except Exception:
+            return {"imports": [], "functions": [], "classes": [], "data_ops": []}
+
+        imports: List[str] = []
+        functions: List[str] = []
+        classes: List[str] = []
+        data_ops: List[Dict[str, str]] = []
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name:
+                        imports.append(alias.name)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    imports.append(node.module)
+            elif isinstance(node, ast.FunctionDef):
+                if not node.name.startswith("_") or node.name == "__init__":
+                    functions.append(node.name)
+            elif isinstance(node, ast.AsyncFunctionDef):
+                if not node.name.startswith("_") or node.name == "__init__":
+                    functions.append(node.name)
+            elif isinstance(node, ast.ClassDef):
+                classes.append(node.name)
+            elif isinstance(node, ast.Call):
+                # Minimal heuristic; details used later by the Hydrologist.
+                func_name = ""
+                if isinstance(node.func, ast.Name):
+                    func_name = node.func.id
+                elif isinstance(node.func, ast.Attribute):
+                    func_name = node.func.attr
+                if any(k in func_name for k in ("read_csv", "read_sql", "execute", "read", "write")):
+                    data_ops.append({"type": func_name, "args": ""})
+
+        return {
+            "imports": sorted(set(imports)),
+            "functions": sorted(set(functions)),
+            "classes": sorted(set(classes)),
+            "data_ops": data_ops,
+        }
+
     def _parse(self, file_path: str):
         if not self.parser:
             return None
@@ -46,6 +96,11 @@ class TreeSitterAnalyzer:
 
     def analyze_python_module(self, file_path: str) -> Dict[str, Any]:
         """Extracts imports, public functions, classes."""
+        # Prefer stdlib AST parsing for Python; it's more robust and doesn't require optional deps.
+        ast_result = self._analyze_python_ast(file_path)
+        if ast_result["imports"] or ast_result["functions"] or ast_result["classes"]:
+            return ast_result
+
         parsed = self._parse(file_path)
         if not parsed:
             return {"imports": [], "functions": [], "classes": [], "data_ops": []}

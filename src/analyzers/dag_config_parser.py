@@ -13,21 +13,28 @@ class DAGConfigParser:
                 return configs
                 
             # dbt typically has "models", "sources", "seeds"
-            if 'models' in content:
-                for model in content['models']:
-                    model_name = model.get('name')
-                    configs.append({
-                        "type": "model",
-                        "name": model_name,
-                    })
-            if 'sources' in content:
-                for source in content['sources']:
-                    source_name = source.get('name')
-                    for table in source.get('tables', []):
-                        configs.append({
-                            "type": "source",
-                            "name": f"{source_name}.{table.get('name')}",
-                        })
+            models = content.get("models")
+            if isinstance(models, list):
+                for model in models:
+                    if isinstance(model, dict):
+                        model_name = model.get("name")
+                        if model_name:
+                            configs.append({"type": "model", "name": model_name})
+
+            sources = content.get("sources")
+            if isinstance(sources, list):
+                for source in sources:
+                    if not isinstance(source, dict):
+                        continue
+                    source_name = source.get("name")
+                    for table in source.get("tables", []) or []:
+                        if isinstance(table, dict) and source_name and table.get("name"):
+                            configs.append(
+                                {
+                                    "type": "source",
+                                    "name": f"{source_name}.{table.get('name')}",
+                                }
+                            )
         except Exception as e:
             print(f"Error parsing dbt yaml {file_path}: {e}")
             

@@ -16,20 +16,21 @@ This project utilizes `uv` for fast dependency management. Make sure you have `u
 Run the core analysis pipeline on a given repository (local path or GitHub URL):
 
 ```bash
-python src/cli.py analyze /path/to/your/repo
+./.venv/Scripts/python.exe src/cli.py analyze /path/to/your/repo
 ```
 
-This will run the sequence of analysis agents and generate output artifacts in the `.cartography/` directory, including:
+This runs the current analysis agents and generates output artifacts in the *target repo's* `.cartography/` directory, including:
 - `module_graph.json`: The layout and structure.
 - `lineage_graph.json`: Data flow tracking.
-- `CODEBASE.md`: High-level AI context map.
 
 ### Query the Knowledge Graph
 Once analysis is complete, you can interact with the graph.
 
 ```bash
-python src/cli.py query /path/to/analyzed/repo
+./.venv/Scripts/python.exe src/cli.py query /path/to/analyzed/repo
 ```
+
+`query` is currently a stub (placeholder for the Navigator agent).
 
 ## Structure
 - `src/agents/`: The intelligent agents (Surveyor, Hydrologist, etc.)

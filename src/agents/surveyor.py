@@ -12,11 +12,21 @@ class Surveyor:
         self.kg = kg
         self.analyzer = TreeSitterAnalyzer()
 
-    def _get_git_velocity(self, repo_path: str, days: int = 30) -> Dict[str, int]:
+    def _get_git_velocity(self, repo_path: Path, days: int = 30) -> Dict[str, int]:
         velocity = {}
         try:
-            cmd = ["git", "log", f"--since={days}.days", "--name-only", "--pretty=format:"]
-            result = subprocess.run(cmd, cwd=repo_path, capture_output=True, text=True, check=True)
+            # Git expects a human-ish time expression (e.g. "30 days ago"), not "30.days".
+            # Also, some environments (like sandboxed agents) can trigger safe.directory checks.
+            cmd = [
+                "git",
+                "-c",
+                f"safe.directory={repo_path.resolve()}",
+                "log",
+                f"--since={days} days ago",
+                "--name-only",
+                "--pretty=format:",
+            ]
+            result = subprocess.run(cmd, cwd=str(repo_path), capture_output=True, text=True, check=True)
             for line in result.stdout.splitlines():
                 line = line.strip()
                 if line:
@@ -25,36 +35,123 @@ class Surveyor:
             print(f"Failed to get git velocity: {e}")
         return velocity
 
-    def analyze(self, repo_path: str):
+    def _pagerank_power_iteration(
+        self,
+        graph: nx.DiGraph,
+        alpha: float = 0.85,
+        max_iter: int = 100,
+        tol: float = 1.0e-6,
+    ) -> Dict[str, float]:
+        nodes = list(graph.nodes)
+        n = len(nodes)
+        if n == 0:
+            return {}
+
+        rank = {node: 1.0 / n for node in nodes}
+        out_weight_sum: Dict[str, float] = {}
+        dangling = []
+
+        for node in nodes:
+            total = 0.0
+            for _, __, data in graph.out_edges(node, data=True):
+                total += float(data.get("weight", 1.0))
+            out_weight_sum[node] = total
+            if total == 0.0:
+                dangling.append(node)
+
+        base = (1.0 - alpha) / n
+
+        for _ in range(max_iter):
+            new_rank = {node: base for node in nodes}
+            dangling_mass = alpha * sum(rank[node] for node in dangling) / n if dangling else 0.0
+
+            for src in nodes:
+                total = out_weight_sum[src]
+                if total == 0.0:
+                    continue
+
+                src_rank = rank[src]
+                for _, dst, data in graph.out_edges(src, data=True):
+                    weight = float(data.get("weight", 1.0))
+                    new_rank[dst] += alpha * src_rank * (weight / total)
+
+            if dangling_mass:
+                for node in nodes:
+                    new_rank[node] += dangling_mass
+
+            err = sum(abs(new_rank[node] - rank[node]) for node in nodes)
+            rank = new_rank
+            if err < tol:
+                break
+
+        return rank
+
+    def analyze(self, repo_path: str | Path):
         print(f"Surveyor analyzing structure of {repo_path}")
         
-        velocity = self._get_git_velocity(repo_path, days=30)
-        base_path = Path(repo_path)
+        base_path = Path(repo_path).resolve()
+        velocity = self._get_git_velocity(base_path, days=30)
         
         for root, dirs, files in os.walk(base_path):
-            dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ('venv', '__pycache__', 'env', '.venv')]
+            dirs[:] = [
+                d
+                for d in dirs
+                if not d.startswith(".")
+                and d
+                not in (
+                    "venv",
+                    "__pycache__",
+                    "env",
+                    ".venv",
+                    ".cartography",
+                    "_targets",
+                    "_tmp",
+                    "node_modules",
+                )
+            ]
             for file in files:
-                if file.endswith('.py'):
-                    file_path = Path(root) / file
-                    rel_path = str(file_path.relative_to(base_path)).replace("\\", "/")
-                    
+                file_path = Path(root) / file
+                ext = file_path.suffix.lower()
+                if ext not in {".py", ".sql", ".yml", ".yaml"}:
+                    continue
+
+                rel_path = str(file_path.relative_to(base_path)).replace("\\", "/")
+                language = {
+                    ".py": "python",
+                    ".sql": "sql",
+                    ".yml": "yaml",
+                    ".yaml": "yaml",
+                }.get(ext, ext.lstrip("."))
+
+                data: Dict[str, Any] = {}
+                is_dead = False
+                if ext == ".py":
                     data = self.analyzer.analyze_python_module(str(file_path))
-                    
-                    node = ModuleNode(
-                        path=rel_path,
-                        language="python",
-                        change_velocity_30d=velocity.get(rel_path, 0),
-                        is_dead_code_candidate=(len(data.get("functions", [])) == 0 and len(data.get("classes", [])) == 0)
-                    )
-                    
-                    self.kg.module_graph.add_node(rel_path, **node.dict())
-                    
+                    is_dead = (len(data.get("functions", [])) == 0 and len(data.get("classes", [])) == 0)
+
+                node = ModuleNode(
+                    path=rel_path,
+                    language=language,
+                    change_velocity_30d=velocity.get(rel_path, 0),
+                    is_dead_code_candidate=is_dead,
+                )
+                self.kg.module_graph.add_node(rel_path, **node.dict())
+
+                if ext == ".py":
                     for imp in data.get("imports", []):
-                        target = imp.replace('.', '/') + ".py"
-                        self.kg.module_graph.add_edge(rel_path, target, weight=1)
+                        # Only add edges to modules that exist locally in the repo.
+                        candidate = base_path / Path(*imp.split("."))
+                        py_mod = candidate.with_suffix(".py")
+                        pkg_init = candidate / "__init__.py"
+                        if py_mod.exists():
+                            target = str(py_mod.relative_to(base_path)).replace("\\", "/")
+                            self.kg.module_graph.add_edge(rel_path, target, weight=1)
+                        elif pkg_init.exists():
+                            target = str(pkg_init.relative_to(base_path)).replace("\\", "/")
+                            self.kg.module_graph.add_edge(rel_path, target, weight=1)
                         
         try:
-            ranks = nx.pagerank(self.kg.module_graph, weight='weight')
+            ranks = self._pagerank_power_iteration(self.kg.module_graph)
             for node_id, rank in ranks.items():
                 if node_id in self.kg.module_graph.nodes:
                     self.kg.module_graph.nodes[node_id]['pagerank'] = rank

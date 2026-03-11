@@ -9,6 +9,8 @@ venv.bak/
 
 # Project configuration
 .cartography/
+_targets/
+_tmp/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

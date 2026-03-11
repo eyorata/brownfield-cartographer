@@ -11,43 +11,45 @@ class SQLLineageAnalyzer:
         Parses SQL to find dependencies via sqlglot.
         Returns sources (tables read from) and targets (tables written to).
         """
+        sources: List[str] = []
+        targets: List[str] = []
+
+        parsed = None
         try:
             parsed = parse_one(sql_query, read=dialect)
         except Exception as e:
+            # Many dbt models contain Jinja which sqlglot cannot parse directly.
+            # We still extract dependencies via regex fallbacks below.
             print(f"Failed to parse SQL: {e}")
-            return {"sources": [], "targets": []}
-            
-        sources = []
-        targets = []
-        
-        if not parsed:
-            return {"sources": [], "targets": []}
         
         # Determine targets (e.g. CREATE TABLE AS ... or INSERT INTO ...)
-        if isinstance(parsed, exp.Create):
-            this_node = parsed.find(exp.Table)
-            if this_node:
-                targets.append(this_node.name)
-        elif isinstance(parsed, exp.Insert):
-            this_node = parsed.find(exp.Table)
-            if this_node:
-                targets.append(this_node.name)
+        if parsed is not None:
+            if isinstance(parsed, exp.Create):
+                this_node = parsed.find(exp.Table)
+                if this_node:
+                    targets.append(this_node.name)
+            elif isinstance(parsed, exp.Insert):
+                this_node = parsed.find(exp.Table)
+                if this_node:
+                    targets.append(this_node.name)
                 
         # Find all CTEs to exclude them from sources
         cte_names = set()
-        for with_ in parsed.find_all(exp.With):
-            for cte in with_.expressions:
-                cte_names.add(cte.alias)
+        if parsed is not None:
+            for with_ in parsed.find_all(exp.With):
+                for cte in with_.expressions:
+                    cte_names.add(cte.alias)
                 
         # Find all table references
-        for table in parsed.find_all(exp.Table):
-            if table.name not in cte_names and table.name not in targets:
-                name = table.name
-                if table.db:
-                    name = f"{table.db}.{name}"
-                if table.catalog:
-                    name = f"{table.catalog}.{name}"
-                sources.append(name)
+        if parsed is not None:
+            for table in parsed.find_all(exp.Table):
+                if table.name not in cte_names and table.name not in targets:
+                    name = table.name
+                    if table.db:
+                        name = f"{table.db}.{name}"
+                    if table.catalog:
+                        name = f"{table.catalog}.{name}"
+                    sources.append(name)
                 
         # Also parse dbt ref() if they exist. ref and source in dbt are often rendered as functions if not compiled
         # But if it's a jinja {{ ref('table') }}, sqlglot won't parse it well unless it's configured.

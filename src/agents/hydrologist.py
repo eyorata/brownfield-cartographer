@@ -8,7 +8,7 @@ class Hydrologist:
     def __init__(self, kg: KnowledgeGraph):
         self.kg = kg
 
-    def analyze(self, repo_path: str):
+    def analyze(self, repo_path: str | Path):
         print(f"Hydrologist analyzing data lineage of {repo_path}")
         from analyzers.tree_sitter_analyzer import TreeSitterAnalyzer
         from analyzers.sql_lineage import SQLLineageAnalyzer
@@ -18,10 +18,25 @@ class Hydrologist:
         sql_analyzer = SQLLineageAnalyzer()
         yaml_parser = DAGConfigParser()
         
-        base_path = Path(repo_path)
+        base_path = Path(repo_path).resolve()
         
         for root, dirs, files in os.walk(base_path):
-            dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ('venv', '__pycache__', 'env', '.venv')]
+            dirs[:] = [
+                d
+                for d in dirs
+                if not d.startswith(".")
+                and d
+                not in (
+                    "venv",
+                    "__pycache__",
+                    "env",
+                    ".venv",
+                    ".cartography",
+                    "_targets",
+                    "_tmp",
+                    "node_modules",
+                )
+            ]
             for file in files:
                 file_path = Path(root) / file
                 rel_path = str(file_path.relative_to(base_path)).replace("\\", "/")
@@ -61,6 +76,10 @@ class Hydrologist:
                         print(f"Failed to process {file_path}: {e}")
                             
                 elif file.endswith(('.yml', '.yaml')):
+                    # Only parse dbt schema-style YAML (models/sources). Skip dbt_project.yml and other non-schema files.
+                    if file_path.name.lower() in {"dbt_project.yml", "packages.yml", "profiles.yml"}:
+                        continue
+
                     configs = yaml_parser.parse_dbt_yaml(str(file_path))
                     for conf in configs:
                         if conf["type"] == "source":
