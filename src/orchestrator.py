@@ -11,6 +11,24 @@ from agents.surveyor import Surveyor
 from agents.hydrologist import Hydrologist
 from graph.knowledge_graph import KnowledgeGraph
 
+
+def _require_runtime_deps() -> None:
+    missing = []
+    for mod in ("networkx", "pydantic", "sqlglot", "yaml"):
+        try:
+            __import__(mod)
+        except Exception:
+            missing.append(mod)
+    if missing:
+        msg = (
+            "Missing required Python dependencies: "
+            + ", ".join(missing)
+            + "\n\n"
+            + "Run using the project venv:\n"
+            + "  .\\.venv\\Scripts\\python.exe .\\src\\orchestrator.py\n"
+        )
+        raise SystemExit(msg)
+
 class Orchestrator:
     def __init__(self):
         self.kg = KnowledgeGraph()
@@ -38,5 +56,6 @@ class Orchestrator:
         print("Orchestration complete. Artifacts saved in .cartography/")
 
 if __name__ == "__main__":
+    _require_runtime_deps()
     orchestrator = Orchestrator()
     orchestrator.run_analysis(".")

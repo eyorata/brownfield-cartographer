@@ -11,6 +11,31 @@ if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
 
+def _require_runtime_deps() -> None:
+    """
+    Fail fast with a helpful message if the user is running with a Python that
+    doesn't have this project's deps installed (common when not using .venv).
+    """
+    missing = []
+    for mod in ("networkx", "pydantic", "sqlglot", "yaml"):
+        try:
+            __import__(mod)
+        except Exception:
+            missing.append(mod)
+
+    if missing:
+        msg = (
+            "Missing required Python dependencies: "
+            + ", ".join(missing)
+            + "\n\n"
+            + "Run using the project venv (recommended):\n"
+            + "  .\\.venv\\Scripts\\python.exe .\\src\\cli.py analyze <repo_path>\n\n"
+            + "Or install deps with uv:\n"
+            + "  uv sync\n"
+        )
+        raise SystemExit(msg)
+
+
 def _is_git_url(value: str) -> bool:
     try:
         parsed = urlparse(value)
@@ -82,6 +107,7 @@ def main():
     
     if args.command == "analyze":
         print(f"Running analysis on: {repo_path}")
+        _require_runtime_deps()
         from orchestrator import Orchestrator
         orchestrator = Orchestrator()
         orchestrator.run_analysis(repo_path)
