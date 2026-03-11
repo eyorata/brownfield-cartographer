@@ -1,8 +1,14 @@
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Dict, Any
 import networkx as nx
+
+_SRC_DIR = Path(__file__).resolve().parents[1]
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
 from graph.knowledge_graph import KnowledgeGraph
 from models.edges import ImportsEdge
 from models.nodes import ModuleNode

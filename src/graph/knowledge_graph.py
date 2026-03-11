@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import sys
 import json
 from pathlib import Path
 from typing import Any
 
 import networkx as nx
+
+_SRC_DIR = Path(__file__).resolve().parents[1]
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
 
 from models.edges import CallsEdge, ConfiguresEdge, ConsumesEdge, ImportsEdge, ProducesEdge
 from models.nodes import DatasetNode, ModuleNode, TransformationNode

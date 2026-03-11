@@ -1,6 +1,12 @@
 import os
+import sys
 from pathlib import Path
 import networkx as nx
+
+_SRC_DIR = Path(__file__).resolve().parents[1]
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
 from graph.knowledge_graph import KnowledgeGraph
 from models.edges import ConsumesEdge, ProducesEdge
 from models.nodes import DatasetNode, TransformationNode

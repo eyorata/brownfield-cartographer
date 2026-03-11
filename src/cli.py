@@ -4,6 +4,12 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
+# Allow running from repo root (`python src/cli.py ...`) or directly (`python cli.py ...`)
+# without import errors across `agents/`, `analyzers/`, etc.
+_SRC_DIR = Path(__file__).resolve().parent
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
 
 def _is_git_url(value: str) -> bool:
     try:

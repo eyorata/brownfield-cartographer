@@ -1,8 +1,14 @@
 import re
+import sys
 from typing import Any, Dict, List, Optional
 
 import sqlglot
 from sqlglot import exp, parse
+from pathlib import Path
+
+_SRC_DIR = Path(__file__).resolve().parents[1]
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
 
 class SQLLineageAnalyzer:
     def __init__(self):
