@@ -92,7 +92,7 @@ def main():
     analyze_parser.add_argument(
         "--output-dir",
         default=None,
-        help="Directory to write artifacts (default: <target_repo>/.cartography). Example: --output-dir .cartography",
+        help="Optional second directory to also write artifacts. Primary output always goes to <target_repo>/.cartography. Example: --output-dir .cartography",
     )
     
     query_parser = subparsers.add_parser("query", help="Interactive Navigator query agent")

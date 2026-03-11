@@ -46,18 +46,26 @@ class Orchestrator:
         self.hydrologist.analyze(repo_root)
         
         # Serialization Phase
-        if output_dir is None:
-            # Default: artifacts belong to the analyzed repo.
-            out_root = repo_root / ".cartography"
+        # Always write artifacts into the analyzed repo's `.cartography/`.
+        target_out = repo_root / ".cartography"
+        target_out.mkdir(exist_ok=True, parents=True)
+
+        self.kg.serialize_module_graph(target_out / "module_graph.json")
+        self.kg.serialize_lineage_graph(target_out / "lineage_graph.json")
+
+        # Optionally also write a copy somewhere else (e.g. this tool repo's `.cartography/`).
+        extra_out = None
+        if output_dir is not None:
+            extra_out = Path(output_dir).expanduser().resolve()
+            extra_out.mkdir(exist_ok=True, parents=True)
+            if extra_out != target_out:
+                self.kg.serialize_module_graph(extra_out / "module_graph.json")
+                self.kg.serialize_lineage_graph(extra_out / "lineage_graph.json")
+
+        if extra_out and extra_out != target_out:
+            print(f"Orchestration complete. Artifacts saved in: {target_out} and {extra_out}")
         else:
-            # Allows writing artifacts into this tool repo's `.cartography/` (or any other path).
-            out_root = Path(output_dir).expanduser().resolve()
-        out_root.mkdir(exist_ok=True, parents=True)
-        
-        self.kg.serialize_module_graph(out_root / "module_graph.json")
-        self.kg.serialize_lineage_graph(out_root / "lineage_graph.json")
-        
-        print(f"Orchestration complete. Artifacts saved in: {out_root}")
+            print(f"Orchestration complete. Artifacts saved in: {target_out}")
 
 if __name__ == "__main__":
     _require_runtime_deps()
