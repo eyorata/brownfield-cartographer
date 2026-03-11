@@ -89,6 +89,11 @@ def main():
 
     analyze_parser = subparsers.add_parser("analyze", help="Run the full analysis pipeline")
     analyze_parser.add_argument("path", help="Path to a local repository or GitHub URL")
+    analyze_parser.add_argument(
+        "--output-dir",
+        default=None,
+        help="Directory to write artifacts (default: <target_repo>/.cartography). Example: --output-dir .cartography",
+    )
     
     query_parser = subparsers.add_parser("query", help="Interactive Navigator query agent")
     query_parser.add_argument("path", help="Path to the analyzed repository")
@@ -110,7 +115,7 @@ def main():
         _require_runtime_deps()
         from orchestrator import Orchestrator
         orchestrator = Orchestrator()
-        orchestrator.run_analysis(repo_path)
+        orchestrator.run_analysis(repo_path, output_dir=args.output_dir)
     elif args.command == "query":
         print(f"Starting Navigator query session for: {repo_path}")
         # Run Navigator

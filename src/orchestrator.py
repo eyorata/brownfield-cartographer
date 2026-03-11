@@ -35,7 +35,7 @@ class Orchestrator:
         self.surveyor = Surveyor(self.kg)
         self.hydrologist = Hydrologist(self.kg)
 
-    def run_analysis(self, repo_path: str | Path):
+    def run_analysis(self, repo_path: str | Path, output_dir: str | Path | None = None):
         repo_root = Path(repo_path).resolve()
         print(f"Starting orchestration for: {repo_root}")
         
@@ -46,14 +46,18 @@ class Orchestrator:
         self.hydrologist.analyze(repo_root)
         
         # Serialization Phase
-        # Artifacts belong to the analyzed repo, not the cartographer repo.
-        output_dir = repo_root / ".cartography"
-        output_dir.mkdir(exist_ok=True)
+        if output_dir is None:
+            # Default: artifacts belong to the analyzed repo.
+            out_root = repo_root / ".cartography"
+        else:
+            # Allows writing artifacts into this tool repo's `.cartography/` (or any other path).
+            out_root = Path(output_dir).expanduser().resolve()
+        out_root.mkdir(exist_ok=True, parents=True)
         
-        self.kg.serialize_module_graph(output_dir / "module_graph.json")
-        self.kg.serialize_lineage_graph(output_dir / "lineage_graph.json")
+        self.kg.serialize_module_graph(out_root / "module_graph.json")
+        self.kg.serialize_lineage_graph(out_root / "lineage_graph.json")
         
-        print("Orchestration complete. Artifacts saved in .cartography/")
+        print(f"Orchestration complete. Artifacts saved in: {out_root}")
 
 if __name__ == "__main__":
     _require_runtime_deps()
