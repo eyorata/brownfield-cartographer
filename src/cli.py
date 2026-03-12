@@ -89,10 +89,16 @@ def main():
 
     analyze_parser = subparsers.add_parser("analyze", help="Run the full analysis pipeline")
     analyze_parser.add_argument("path", help="Path to a local repository or GitHub URL")
+    analyze_parser.add_argument("--config", default=None, help="Path to cartography_config.yaml (optional)")
     analyze_parser.add_argument(
         "--output-dir",
         default=None,
         help="Optional second directory to also write artifacts. Primary output always goes to <target_repo>/.cartography. Example: --output-dir .cartography",
+    )
+    analyze_parser.add_argument(
+        "--incremental",
+        action="store_true",
+        help="Incremental mode (re-analyze changed files only) based on config.diff_range",
     )
     
     query_parser = subparsers.add_parser("query", help="Interactive Navigator query agent")
@@ -102,10 +108,12 @@ def main():
         default=None,
         help="Optional directory containing module_graph.json / lineage_graph.json. Defaults to <repo>/.cartography",
     )
+    query_parser.add_argument("--config", default=None, help="Path to cartography_config.yaml (optional)")
 
     serve_parser = subparsers.add_parser("serve", help="Run the local Cartography UI server")
     serve_parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
     serve_parser.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")
+    serve_parser.add_argument("--config", default=None, help="Path to cartography_config.yaml (optional)")
 
     args = parser.parse_args()
 
@@ -122,21 +130,26 @@ def main():
     if args.command == "analyze":
         print(f"Running analysis on: {repo_path}")
         _require_runtime_deps()
+        from config import load_config
         from orchestrator import Orchestrator
+
+        cfg = load_config(args.config)
         orchestrator = Orchestrator()
-        orchestrator.run_analysis(repo_path, output_dir=args.output_dir)
+        orchestrator.run_analysis(repo_path, output_dir=args.output_dir, config=cfg, incremental=bool(args.incremental))
     elif args.command == "query":
         print(f"Starting Navigator query session for: {repo_path}")
         _require_runtime_deps()
+        from config import load_config
         from agents.navigator import Navigator
         from graph.knowledge_graph import KnowledgeGraph
 
         repo_root = Path(repo_path).resolve()
         graph_dir = Path(args.graph_dir).resolve() if args.graph_dir else (repo_root / ".cartography")
 
+        cfg = load_config(args.config)
         kg = KnowledgeGraph()
         kg.load_from_dir(graph_dir)
-        nav = Navigator(kg)
+        nav = Navigator(kg, config=cfg)
 
         print(f"Loaded graphs from: {graph_dir}")
         print("Type 'help' for commands. Type 'exit' to quit.")

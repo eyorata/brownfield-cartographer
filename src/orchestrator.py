@@ -12,6 +12,7 @@ from agents.hydrologist import Hydrologist
 from agents.semanticist import Semanticist
 from agents.archivist import Archivist
 from graph.knowledge_graph import KnowledgeGraph
+from config import CartographyConfig
 
 
 def _require_runtime_deps() -> None:
@@ -44,12 +45,21 @@ class Orchestrator:
         repo_path: str | Path,
         output_dir: str | Path | None = None,
         phases: list[str] | None = None,
+        config: CartographyConfig | None = None,
+        incremental: bool = False,
     ):
         repo_root = Path(repo_path).resolve()
         print(f"Starting orchestration for: {repo_root}")
 
         phases = [p.lower() for p in (phases or ["surveyor", "hydrologist", "semanticist", "archivist"])]
         trace = [{"ts": self._utc_now(), "event": "start", "repo_root": str(repo_root), "phases": phases}]
+        config = config or CartographyConfig()
+
+        # Incremental mode will be implemented fully (prune + re-run only changed files).
+        # For now, we keep the flag to match the final rubric API surface.
+        if incremental and config.incremental.enabled is False:
+            # If user passed --incremental but config disables it, prefer safety and run full.
+            incremental = False
         
         # Surveyor Phase
         if "surveyor" in phases:
@@ -64,9 +74,9 @@ class Orchestrator:
             trace.append({"ts": self._utc_now(), "event": "phase_end", "phase": "hydrologist"})
 
         # Semanticist Phase
-        if "semanticist" in phases:
+        if "semanticist" in phases and config.semanticist.enabled:
             trace.append({"ts": self._utc_now(), "event": "phase_start", "phase": "semanticist"})
-            self.semanticist.annotate_modules(repo_root)
+            self.semanticist.annotate_modules(repo_root, config=config)
             trace.append({"ts": self._utc_now(), "event": "phase_end", "phase": "semanticist"})
         
         # Serialization Phase

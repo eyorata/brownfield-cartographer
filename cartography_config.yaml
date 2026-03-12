@@ -1,0 +1,30 @@
+llm:
+  # LM Studio exposes an OpenAI-compatible server. Typical default:
+  #   http://localhost:1234/v1
+  base_url: "http://localhost:1234/v1"
+  api_key: "lm-studio"
+  # Set this to the exact model name shown in LM Studio (Model tab / server logs).
+  model: "local-model"
+  temperature: 0.2
+  max_tokens: 900
+  timeout_s: 90
+
+semanticist:
+  enabled: true
+  # Limit LLM calls for very large repos. Purpose statements still get filled
+  # deterministically for all modules; LLM is used for drift/Q&A where enabled.
+  max_llm_modules: 120
+  doc_drift_detection: true
+  day_one_answers: true
+  context_budget_tokens: 6000
+
+navigator:
+  use_langgraph: true
+  citations: true
+
+incremental:
+  enabled: false
+  # Git ref range used when incremental is enabled.
+  # Example: "HEAD~1..HEAD" or "main..HEAD"
+  diff_range: "HEAD~1..HEAD"
+

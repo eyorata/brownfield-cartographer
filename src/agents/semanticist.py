@@ -10,7 +10,9 @@ _SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
+from config import CartographyConfig
 from graph.knowledge_graph import KnowledgeGraph
+from llm import ChatMessage, OpenAICompatClient
 
 
 @dataclass(frozen=True)
@@ -80,10 +82,11 @@ class Semanticist:
 
         return f"{path} is a source file."
 
-    def annotate_modules(self, repo_root: Path) -> None:
+    def annotate_modules(self, repo_root: Path, config: CartographyConfig | None = None) -> None:
         """
         Adds/updates purpose_statement + domain_cluster on module graph nodes.
         """
+        config = config or CartographyConfig()
         for node_id, attrs in list(self.kg.module_graph.nodes(data=True)):
             try:
                 rel = str(node_id)
