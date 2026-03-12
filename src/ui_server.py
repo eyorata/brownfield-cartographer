@@ -73,6 +73,40 @@ def _parse_trace(trace_path: Path) -> Dict[str, Any]:
     return {"phases": phases, "events": events}
 
 
+_ARTIFACT_ALLOWLIST = [
+    "CODEBASE.md",
+    "onboarding_brief.md",
+    "module_graph.json",
+    "lineage_graph.json",
+    "cartography_trace.jsonl",
+]
+
+
+def _list_artifacts(dir_path: Path) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for name in _ARTIFACT_ALLOWLIST:
+        fp = (dir_path / name).resolve()
+        exists = fp.exists()
+        size = int(fp.stat().st_size) if exists else 0
+        out.append({"name": name, "exists": exists, "size_bytes": size})
+    return out
+
+
+def _read_artifact_text(dir_path: Path, name: str, max_bytes: int = 200_000) -> Dict[str, Any]:
+    if name not in _ARTIFACT_ALLOWLIST:
+        raise ValueError("artifact not allowed")
+    fp = (dir_path / name).resolve()
+    if not fp.exists():
+        return {"name": name, "exists": False, "truncated": False, "content": ""}
+    data = fp.read_bytes()
+    truncated = False
+    if len(data) > max_bytes:
+        data = data[:max_bytes]
+        truncated = True
+    content = data.decode("utf-8", errors="ignore")
+    return {"name": name, "exists": True, "truncated": truncated, "content": content}
+
+
 def _load_node_link(path: Path) -> Dict[str, Any]:
     """
     Load a NetworkX node-link JSON file. Supports both 'links' and 'edges' keys.
@@ -404,6 +438,7 @@ _INDEX_HTML = """<!doctype html>
       .small { font-size: 12px; color: var(--muted); font-family: system-ui, -apple-system, Segoe UI, Arial, sans-serif; }
       a { color: var(--accent); text-decoration: none; }
       a:hover { text-decoration: underline; }
+      .split { display: grid; grid-template-rows: auto auto; gap: 14px; }
     </style>
   </head>
   <body>
@@ -430,9 +465,17 @@ _INDEX_HTML = """<!doctype html>
         <div style="margin-top:12px;" class="small" id="paths"></div>
         <div style="margin-top:10px;" class="small" id="views"></div>
       </section>
-      <section class="card">
-        <h2>Logs</h2>
-        <pre id="log">(no job yet)</pre>
+      <section class="split">
+        <section class="card">
+          <h2>Logs</h2>
+          <pre id="log">(no job yet)</pre>
+        </section>
+        <section class="card">
+          <h2>Artifacts</h2>
+          <div class="small" id="art_list">(no job yet)</div>
+          <div style="height:10px;"></div>
+          <pre id="art_preview">(select an artifact)</pre>
+        </section>
       </section>
     </main>
     <script>
@@ -444,6 +487,8 @@ _INDEX_HTML = """<!doctype html>
       const jobMeta = document.getElementById('job_meta');
       const pathsEl = document.getElementById('paths');
       const viewsEl = document.getElementById('views');
+      const artListEl = document.getElementById('art_list');
+      const artPrevEl = document.getElementById('art_preview');
       const phaseDots = {
         surveyor: document.getElementById('p_surveyor'),
         hydrologist: document.getElementById('p_hydrologist'),
@@ -472,6 +517,8 @@ _INDEX_HTML = """<!doctype html>
         runBtn.disabled = true;
         pathsEl.textContent = '';
         viewsEl.textContent = '';
+        artListEl.textContent = '';
+        artPrevEl.textContent = '';
         Object.values(phaseDots).forEach(d => setDot(d, 'idle'));
         setStatus('starting');
         logEl.textContent = '';
@@ -511,12 +558,51 @@ _INDEX_HTML = """<!doctype html>
           viewsEl.innerHTML =
             `View: <a href="/graph?id=${encodeURIComponent(currentJob)}&type=module" target="_blank">module graph</a>` +
             ` | <a href="/graph?id=${encodeURIComponent(currentJob)}&type=lineage" target="_blank">lineage graph</a>`;
+
+          if (data.artifacts) {
+            const items = [];
+            for (const where of ['ui','target']) {
+              const arr = (data.artifacts[where] || []);
+              if (!arr.length) continue;
+              items.push(`<div class="small"><strong>${where}</strong></div>`);
+              for (const a of arr) {
+                const name = a.name;
+                const ok = a.exists;
+                const size = a.size_bytes || 0;
+                const label = ok ? `${name} (${size}B)` : `${name} (missing)`;
+                const disabled = ok ? '' : 'style="opacity:0.55; pointer-events:none;"';
+                items.push(
+                  `<div><a ${disabled} href="#" data-where="${where}" data-name="${name}">${label}</a></div>`
+                );
+              }
+            }
+            artListEl.innerHTML = items.join('');
+          }
         }
         if (data.status === 'done' || data.status === 'error') {
           runBtn.disabled = false;
           if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
         }
       }
+
+      artListEl.addEventListener('click', async (evt) => {
+        const t = evt.target;
+        if (!t || !t.dataset) return;
+        const name = t.dataset.name;
+        const where = t.dataset.where;
+        if (!name || !where || !currentJob) return;
+        evt.preventDefault();
+        artPrevEl.textContent = 'Loading...';
+        const resp = await fetch(`/api/artifact?id=${encodeURIComponent(currentJob)}&where=${encodeURIComponent(where)}&name=${encodeURIComponent(name)}`);
+        const data = await resp.json();
+        if (data.error) {
+          artPrevEl.textContent = data.error;
+          return;
+        }
+        let content = data.content || '';
+        if (data.truncated) content += `\n\n[truncated]`;
+        artPrevEl.textContent = content;
+      });
 
       runBtn.addEventListener('click', start);
     </script>
@@ -792,6 +878,16 @@ class Handler(BaseHTTPRequestHandler):
             out_dir = Path(job["output_dir"]).resolve()
             log = _read_tail(Path(job["log_path"]), max_bytes=120_000)
             trace_info = _parse_trace(out_dir / "cartography_trace.jsonl")
+
+            artifacts_ui = _list_artifacts(out_dir)
+            artifacts_target: List[Dict[str, Any]] = []
+            if job.get("resolved_repo_path"):
+                try:
+                    target_dir = (Path(str(job["resolved_repo_path"])) / ".cartography").resolve()
+                    artifacts_target = _list_artifacts(target_dir)
+                except Exception:
+                    artifacts_target = []
+
             self._send_json(
                 {
                     "id": job["id"],
@@ -804,8 +900,34 @@ class Handler(BaseHTTPRequestHandler):
                     "log": log,
                     "phases": trace_info.get("phases"),
                     "trace_events": trace_info.get("events"),
+                    "artifacts": {"ui": artifacts_ui, "target": artifacts_target},
                 }
             )
+            return
+
+        if parsed.path == "/api/artifact":
+            qs = parse_qs(parsed.query or "")
+            job_id = (qs.get("id") or [""])[0]
+            where = ((qs.get("where") or ["ui"])[0] or "ui").lower()
+            name = (qs.get("name") or [""])[0]
+            job = JOBS.get(job_id)
+            if not job:
+                self._send_json({"error": "job not found"}, status=404)
+                return
+
+            base_dir = None
+            if where == "ui":
+                base_dir = Path(job["output_dir"]).resolve()
+            elif where == "target" and job.get("resolved_repo_path"):
+                base_dir = (Path(str(job["resolved_repo_path"])) / ".cartography").resolve()
+            else:
+                base_dir = Path(job["output_dir"]).resolve()
+
+            try:
+                data = _read_artifact_text(base_dir, name)
+                self._send_json(data, status=200)
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=400)
             return
 
         if parsed.path == "/api/graph":
