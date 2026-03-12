@@ -9,6 +9,9 @@ class ModuleNode(BaseModel):
     language: str
     purpose_statement: Optional[str] = None
     domain_cluster: Optional[str] = None
+    # Documentation drift: heuristics/LLM can populate these.
+    doc_drift_score: Optional[float] = None
+    doc_drift_flags: Optional[List[str]] = None
     complexity_score: Optional[int] = None
     change_velocity_30d: Optional[int] = None
     is_dead_code_candidate: bool = False

@@ -161,6 +161,17 @@ class Surveyor:
                 )
                 self.kg.add_module_node(node)
 
+                # Attach analyzer-derived structure for downstream agents (Semanticist/Navigator).
+                # Keep this lightweight and schema-adjacent (stored as node attrs, not in ModuleNode schema).
+                if ext == ".py" and data:
+                    try:
+                        self.kg.module_graph.nodes[rel_path]["function_defs"] = data.get("function_defs") or []
+                        self.kg.module_graph.nodes[rel_path]["class_defs"] = data.get("class_defs") or []
+                        self.kg.module_graph.nodes[rel_path]["data_ops"] = data.get("data_ops") or []
+                        self.kg.module_graph.nodes[rel_path]["import_modules"] = data.get("import_modules") or []
+                    except Exception:
+                        pass
+
                 if ext == ".py":
                     import_specs = data.get("import_modules") or []
                     if not import_specs:

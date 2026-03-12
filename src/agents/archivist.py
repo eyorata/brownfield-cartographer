@@ -99,6 +99,31 @@ class Archivist:
         lines.append(f"Generated: {self._utc_now()}")
         lines.append(f"Target repo: {repo_root}")
         lines.append("")
+
+        day_one = self.kg.module_graph.graph.get("day_one_answers")
+        if isinstance(day_one, dict) and day_one:
+            lines.append("## Day-One Questions (Semanticist)")
+            lines.append("")
+            for key, title in [
+                ("q1_primary_ingestion_path", "1) Primary ingestion path"),
+                ("q2_critical_outputs", "2) Critical outputs"),
+                ("q3_blast_radius", "3) Blast radius"),
+                ("q4_business_logic", "4) Business logic concentration"),
+                ("q5_change_velocity", "5) Recent change velocity"),
+            ]:
+                v = day_one.get(key)
+                if isinstance(v, dict):
+                    ans = str(v.get("answer") or "").strip()
+                    cites = v.get("citations") if isinstance(v.get("citations"), list) else []
+                    lines.append(f"### {title}")
+                    lines.append(f"- {ans}" if ans else "- (no answer)")
+                    if cites:
+                        lines.append("- Citations:")
+                        for c in cites[:10]:
+                            lines.append(f"  - {c}")
+                    lines.append("")
+            lines.append("---")
+            lines.append("")
         lines.append("## Day-One Questions (Auto)")
         lines.append("")
         lines.append("### 1) What does this system do?")

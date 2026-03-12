@@ -102,7 +102,7 @@ class Orchestrator:
         # Semanticist Phase
         if "semanticist" in phases and config.semanticist.enabled:
             trace.append({"ts": self._utc_now(), "event": "phase_start", "phase": "semanticist"})
-            self.semanticist.annotate_modules(repo_root, config=config)
+            self.semanticist.run(repo_root, config=config)
             trace.append({"ts": self._utc_now(), "event": "phase_end", "phase": "semanticist"})
         
         # Serialization Phase

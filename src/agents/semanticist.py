@@ -4,7 +4,7 @@ import sys
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple, Optional
 
 _SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
@@ -21,13 +21,66 @@ class PurposeResult:
     domain_cluster: str
 
 
+@dataclass(frozen=True)
+class Citation:
+    file: str
+    line_range: str
+    snippet: str
+
+
+class ContextWindowBudget:
+    """
+    Very small context budgeting helper.
+
+    We approximate tokens as chars/4 (good enough to avoid blowing up local-model contexts).
+    """
+
+    def __init__(self, token_budget: int):
+        self.token_budget = int(token_budget)
+        self.used_tokens = 0
+        self.sections: List[Dict[str, Any]] = []
+
+    @staticmethod
+    def _approx_tokens(text: str) -> int:
+        return max(1, int(len(text) / 4))
+
+    def remaining(self) -> int:
+        return max(0, self.token_budget - self.used_tokens)
+
+    def try_add(self, title: str, text: str, citations: Optional[List[Citation]] = None) -> bool:
+        t = self._approx_tokens(text)
+        if self.used_tokens + t > self.token_budget:
+            return False
+        self.used_tokens += t
+        self.sections.append(
+            {
+                "title": title,
+                "text": text,
+                "citations": citations or [],
+                "tokens": t,
+            }
+        )
+        return True
+
+    def render(self) -> str:
+        out: List[str] = []
+        for s in self.sections:
+            out.append(f"## {s['title']}")
+            out.append(s["text"].strip())
+            if s.get("citations"):
+                out.append("Citations:")
+                for c in s["citations"]:
+                    out.append(f"- {c.file}:{c.line_range}")
+            out.append("")
+        return "\n".join(out).strip() + "\n"
+
+
 class Semanticist:
     """
-    Interim Semanticist implementation.
+    Semanticist agent: purpose statements, doc drift detection, and Day-One question answering.
 
-    Goal: provide deterministic purpose statements and coarse domain clustering
-    without requiring external LLMs. This keeps the "four phases" pipeline
-    runnable end-to-end in restricted environments.
+    This implementation is designed to work with a local LM Studio model via an OpenAI-compatible API.
+    It degrades gracefully when the LLM is unavailable (deterministic fallbacks still populate fields).
     """
 
     def __init__(self, kg: KnowledgeGraph):
@@ -50,6 +103,81 @@ class Semanticist:
             return ""
         body = m.group("body").strip()
         return re.sub(r"\s+", " ", body)[:240]
+
+    @staticmethod
+    def _read_lines_with_numbers(file_path: Path, start: int, end: int) -> Tuple[str, str]:
+        """
+        Returns (line_range, snippet) with 1-based lines inclusive.
+        """
+        try:
+            lines = file_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except Exception:
+            return "1-1", ""
+        start = max(1, int(start))
+        end = max(start, int(end))
+        end = min(end, len(lines))
+        chunk = lines[start - 1 : end]
+        snippet = "\n".join([f"{i+start:4d}: {ln}" for i, ln in enumerate(chunk)])
+        return f"{start}-{end}", snippet
+
+    @staticmethod
+    def _extract_signal_summary(node_attrs: Dict[str, Any]) -> str:
+        func_defs = node_attrs.get("function_defs") or []
+        class_defs = node_attrs.get("class_defs") or []
+        data_ops = node_attrs.get("data_ops") or []
+
+        fn_names = [f.get("name") for f in func_defs if isinstance(f, dict) and f.get("name")]
+        cls_names = [c.get("name") for c in class_defs if isinstance(c, dict) and c.get("name")]
+
+        ops = []
+        for op in data_ops:
+            if isinstance(op, dict) and op.get("type"):
+                ops.append(str(op.get("type")))
+
+        bits: List[str] = []
+        if cls_names:
+            bits.append("classes=" + ", ".join(sorted(set(cls_names))[:8]))
+        if fn_names:
+            bits.append("functions=" + ", ".join(sorted(set(fn_names))[:12]))
+        if ops:
+            bits.append("data_ops=" + ", ".join(sorted(set(ops))[:10]))
+        return "; ".join(bits)
+
+    @staticmethod
+    def _doc_drift_heuristic(file_text: str, node_attrs: Dict[str, Any]) -> Tuple[float, List[str]]:
+        """
+        Heuristic doc drift detection (fast, always available).
+        Returns (score 0..1, flags).
+        """
+        doc = Semanticist._read_first_docstring(file_text)
+        func_defs = node_attrs.get("function_defs") or []
+        class_defs = node_attrs.get("class_defs") or []
+        fn_names = {str(f.get("name")) for f in func_defs if isinstance(f, dict) and f.get("name")}
+        cls_names = {str(c.get("name")) for c in class_defs if isinstance(c, dict) and c.get("name")}
+
+        flags: List[str] = []
+        if not doc and (fn_names or cls_names):
+            flags.append("no_docstring")
+            return 0.6, flags
+        if not doc:
+            return 0.0, flags
+
+        doc_l = doc.lower()
+        present = 0
+        total = 0
+        for name in sorted(fn_names | cls_names):
+            if name.startswith("_"):
+                continue
+            total += 1
+            if name.lower() in doc_l:
+                present += 1
+        if total >= 6 and present == 0:
+            flags.append("doc_missing_public_symbols")
+            return 0.7, flags
+        if total >= 6 and present / max(1, total) < 0.15:
+            flags.append("doc_mentions_few_symbols")
+            return 0.4, flags
+        return 0.1 if total else 0.0, flags
 
     @staticmethod
     def _purpose_from_signals(path: str, node_attrs: Dict[str, Any], file_text: str) -> str:
@@ -87,6 +215,24 @@ class Semanticist:
         Adds/updates purpose_statement + domain_cluster on module graph nodes.
         """
         config = config or CartographyConfig()
+
+        # Choose a subset of modules for LLM upgrades (purpose/drift), biased by PageRank + velocity.
+        ranked = []
+        for node_id, attrs in self.kg.module_graph.nodes(data=True):
+            pr = float(attrs.get("pagerank") or 0.0)
+            vel = int(attrs.get("change_velocity_30d") or 0)
+            ranked.append((pr * 1_000_000.0 + vel, str(node_id)))
+        ranked.sort(reverse=True)
+        llm_targets = {p for _, p in ranked[: max(1, int(config.semanticist.max_llm_modules))]}
+
+        llm_client: OpenAICompatClient | None = None
+        if config.semanticist.enabled:
+            llm_client = OpenAICompatClient(
+                base_url=config.llm.base_url,
+                api_key=config.llm.api_key,
+                timeout_s=config.llm.timeout_s,
+            )
+
         for node_id, attrs in list(self.kg.module_graph.nodes(data=True)):
             try:
                 rel = str(node_id)
@@ -101,6 +247,146 @@ class Semanticist:
                 purpose = self._purpose_from_signals(rel, attrs, text)
                 attrs["domain_cluster"] = domain
                 attrs["purpose_statement"] = purpose
+
+                if config.semanticist.doc_drift_detection and attrs.get("language") == "python":
+                    drift_score, drift_flags = self._doc_drift_heuristic(text, attrs)
+                    attrs["doc_drift_score"] = float(drift_score)
+                    attrs["doc_drift_flags"] = drift_flags
+
+                # LLM upgrades for a limited subset (purpose statement refinement + drift explanation).
+                if llm_client is not None and rel in llm_targets and file_path.exists():
+                    # Provide signals + a small excerpt. The model should NOT just restate the docstring.
+                    lr, snippet = self._read_lines_with_numbers(file_path, 1, 120)
+                    signals = self._extract_signal_summary(attrs)
+                    sys_msg = (
+                        "You are a codebase cartographer. Write concise purpose statements grounded in code structure. "
+                        "Avoid docstring regurgitation. Output strict JSON only."
+                    )
+                    user_msg = (
+                        f"FILE: {rel}\n"
+                        f"LANG: {attrs.get('language')}\n"
+                        f"SIGNALS: {signals}\n"
+                        f"EXCERPT ({lr}):\n{snippet}\n\n"
+                        "Return JSON with keys:\n"
+                        "- purpose_statement: one sentence\n"
+                        "- domain_cluster: short cluster label derived from path\n"
+                        "- doc_drift_flags: array of short strings (optional)\n"
+                    )
+                    try:
+                        out = llm_client.chat_completions(
+                            model=config.llm.model,
+                            messages=[ChatMessage(role="system", content=sys_msg), ChatMessage(role="user", content=user_msg)],
+                            temperature=config.llm.temperature,
+                            max_tokens=min(600, int(config.llm.max_tokens)),
+                            response_format={"type": "json_object"},
+                        )
+                        import json as _json
+
+                        parsed = _json.loads(out)
+                        ps = str(parsed.get("purpose_statement") or "").strip()
+                        if ps:
+                            attrs["purpose_statement"] = ps
+                        dc = str(parsed.get("domain_cluster") or "").strip()
+                        if dc:
+                            attrs["domain_cluster"] = dc
+                        if isinstance(parsed.get("doc_drift_flags"), list):
+                            attrs["doc_drift_flags"] = [str(x) for x in parsed.get("doc_drift_flags") if str(x).strip()]
+                    except Exception:
+                        # Keep deterministic purpose if LLM fails/unavailable.
+                        pass
             except Exception:
                 # Semanticist should not fail the pipeline.
                 continue
+
+    def answer_day_one_questions(self, repo_root: Path, config: CartographyConfig | None = None) -> None:
+        """
+        Populate repo-level Day-One answers into graph metadata:
+        self.kg.module_graph.graph["day_one_answers"] = {...}
+
+        Includes file:line citations when possible.
+        """
+        config = config or CartographyConfig()
+        llm_client = OpenAICompatClient(
+            base_url=config.llm.base_url,
+            api_key=config.llm.api_key,
+            timeout_s=config.llm.timeout_s,
+        )
+
+        # Evidence selection: top modules by pagerank + top velocity + lineage sources/sinks.
+        top_mods = sorted(
+            [
+                (float(a.get("pagerank") or 0.0), int(a.get("change_velocity_30d") or 0), str(n))
+                for n, a in self.kg.module_graph.nodes(data=True)
+            ],
+            reverse=True,
+        )[:20]
+
+        citations: List[Citation] = []
+        evidence_lines: List[str] = []
+        budget = ContextWindowBudget(token_budget=int(config.semanticist.context_budget_tokens))
+
+        for pr, vel, rel in top_mods[:12]:
+            fp = (repo_root / rel).resolve()
+            if not fp.exists():
+                continue
+            lr, snip = self._read_lines_with_numbers(fp, 1, 80)
+            c = Citation(file=rel, line_range=lr, snippet=snip)
+            citations.append(c)
+            txt = f"{rel} (pagerank={pr:.6f}, velocity_30d={vel})\n{snip}"
+            budget.try_add(title=f"Module Evidence: {rel}", text=txt, citations=[c])
+
+        # Lineage summary evidence.
+        try:
+            from agents.hydrologist import Hydrologist
+
+            hyd = Hydrologist(self.kg)
+            sources = hyd.find_sources()[:30]
+            sinks = hyd.find_sinks()[:30]
+        except Exception:
+            sources, sinks = [], []
+        budget.try_add(title="Lineage Sources", text="\n".join(sources) or "(none)")
+        budget.try_add(title="Lineage Sinks", text="\n".join(sinks) or "(none)")
+
+        sys_msg = (
+            "You are an FDE onboarding assistant. Answer the 5 Day-One questions for this repository. "
+            "Use ONLY the provided evidence. For each answer, include 2-5 citations as file:line_range strings. "
+            "Output strict JSON only."
+        )
+        user_msg = (
+            f"REPO_ROOT: {repo_root}\n\n"
+            f"EVIDENCE:\n{budget.render()}\n\n"
+            "Return JSON with keys:\n"
+            "- q1_primary_ingestion_path: {answer: string, citations: [string]}\n"
+            "- q2_critical_outputs: {answer: string, citations: [string]}\n"
+            "- q3_blast_radius: {answer: string, citations: [string]}\n"
+            "- q4_business_logic: {answer: string, citations: [string]}\n"
+            "- q5_change_velocity: {answer: string, citations: [string]}\n"
+        )
+
+        try:
+            out = llm_client.chat_completions(
+                model=config.llm.model,
+                messages=[ChatMessage(role="system", content=sys_msg), ChatMessage(role="user", content=user_msg)],
+                temperature=config.llm.temperature,
+                max_tokens=int(config.llm.max_tokens),
+                response_format={"type": "json_object"},
+            )
+            import json as _json
+
+            parsed = _json.loads(out)
+            if isinstance(parsed, dict):
+                self.kg.module_graph.graph["day_one_answers"] = parsed
+        except Exception:
+            # Deterministic fallback: keep empty if LLM unavailable.
+            self.kg.module_graph.graph["day_one_answers"] = {
+                "error": "LLM unavailable for day-one answers. Start LM Studio server and re-run semanticist.",
+            }
+
+    def run(self, repo_root: Path, config: CartographyConfig | None = None) -> None:
+        """
+        Full semanticist phase.
+        """
+        config = config or CartographyConfig()
+        self.annotate_modules(repo_root, config=config)
+        if config.semanticist.day_one_answers:
+            self.answer_day_one_questions(repo_root, config=config)

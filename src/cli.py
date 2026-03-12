@@ -149,7 +149,7 @@ def main():
         cfg = load_config(args.config)
         kg = KnowledgeGraph()
         kg.load_from_dir(graph_dir)
-        nav = Navigator(kg, config=cfg)
+        nav = Navigator(kg, repo_root=repo_root, config=cfg)
 
         print(f"Loaded graphs from: {graph_dir}")
         print("Type 'help' for commands. Type 'exit' to quit.")
@@ -167,15 +167,16 @@ def main():
             if raw in {"exit", "quit"}:
                 break
 
-            if raw in {"help", "?"}:
-                print("Commands:")
-                print("  stats")
-                print("  sources [N]")
-                print("  sinks [N]")
-                print("  blast <node>")
-                print("  trace up <node> [depth] | trace down <node> [depth]")
-                print("  module <relative/path.py>")
-                continue
+                if raw in {"help", "?"}:
+                    print("Commands:")
+                    print("  stats")
+                    print("  sources [N]")
+                    print("  sinks [N]")
+                    print("  blast <node>")
+                    print("  trace up <node> [depth] | trace down <node> [depth]")
+                    print("  module <relative/path.py>")
+                    print("  ask <natural language question>  (LangGraph/LLM)")
+                    continue
 
             parts = raw.split()
             cmd = parts[0].lower()
@@ -238,8 +239,18 @@ def main():
                     print("imports_in:")
                     for x in info.get("imports_in") or []:
                         print(f"  - {x.get('from')}")
+                elif cmd == "ask":
+                    q = raw[len("ask") :].strip()
+                    if not q:
+                        print("Usage: ask <question>")
+                        continue
+                    print(nav.ask(q))
                 else:
-                    print("Unknown command. Type 'help'.")
+                    # If LangGraph is enabled, treat unknown input as a natural language question.
+                    if cfg.navigator.use_langgraph:
+                        print(nav.ask(raw))
+                    else:
+                        print("Unknown command. Type 'help'.")
             except Exception as e:
                 print(f"Error: {e}")
     elif args.command == "serve":
