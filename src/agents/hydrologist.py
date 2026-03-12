@@ -25,7 +25,7 @@ class Hydrologist:
         node = DatasetNode(name=name, storage_type=storage_type, owner=owner)
         self.kg.add_dataset_node(node)
 
-    def analyze(self, repo_path: str | Path):
+    def analyze(self, repo_path: str | Path, only_files: set[str] | None = None):
         print(f"Hydrologist analyzing data lineage of {repo_path}")
         from analyzers.tree_sitter_analyzer import TreeSitterAnalyzer
         from analyzers.sql_lineage import SQLLineageAnalyzer
@@ -36,6 +36,9 @@ class Hydrologist:
         yaml_parser = DAGConfigParser()
         
         base_path = Path(repo_path).resolve()
+        only_files_norm = None
+        if only_files:
+            only_files_norm = {str(Path(p).as_posix()) for p in only_files}
         
         for root, dirs, files in os.walk(base_path):
             dirs[:] = [
@@ -57,6 +60,8 @@ class Hydrologist:
             for file in files:
                 file_path = Path(root) / file
                 rel_path = str(file_path.relative_to(base_path)).replace("\\", "/")
+                if only_files_norm is not None and rel_path not in only_files_norm:
+                    continue
                 
                 if file.endswith('.py'):
                     try:

@@ -114,3 +114,49 @@ class KnowledgeGraph:
             self.module_graph = self.deserialize_module_graph(mg)
         if lg.exists():
             self.lineage_graph = self.deserialize_lineage_graph(lg)
+
+    def prune_changed_files(self, changed_rel_paths: set[str]) -> None:
+        """
+        Incremental helper: remove nodes/edges that were produced from a set of source files.
+
+        For module graph:
+        - Node IDs are file paths. Remove nodes whose ID is in changed_rel_paths.
+        - Remove edges whose 'source_file' is in changed_rel_paths.
+
+        For lineage graph:
+        - Transformation node IDs are source_file paths (sql/yaml/py). Remove those nodes.
+        - Remove edges whose 'source_file' is in changed_rel_paths.
+
+        Dataset nodes are not removed (they may be shared across transformations).
+        """
+        if not changed_rel_paths:
+            return
+
+        # Module graph prune
+        for n in list(self.module_graph.nodes):
+            if str(n) in changed_rel_paths:
+                try:
+                    self.module_graph.remove_node(n)
+                except Exception:
+                    pass
+        for u, v, data in list(self.module_graph.edges(data=True)):
+            if str(data.get("source_file") or "") in changed_rel_paths:
+                try:
+                    self.module_graph.remove_edge(u, v)
+                except Exception:
+                    pass
+
+        # Lineage graph prune
+        for n, data in list(self.lineage_graph.nodes(data=True)):
+            # Transformation nodes are keyed by source file path.
+            if str(n) in changed_rel_paths:
+                try:
+                    self.lineage_graph.remove_node(n)
+                except Exception:
+                    pass
+        for u, v, data in list(self.lineage_graph.edges(data=True)):
+            if str(data.get("source_file") or "") in changed_rel_paths:
+                try:
+                    self.lineage_graph.remove_edge(u, v)
+                except Exception:
+                    pass

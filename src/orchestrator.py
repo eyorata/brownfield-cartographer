@@ -13,6 +13,7 @@ from agents.semanticist import Semanticist
 from agents.archivist import Archivist
 from graph.knowledge_graph import KnowledgeGraph
 from config import CartographyConfig
+import subprocess
 
 
 def _require_runtime_deps() -> None:
@@ -56,21 +57,46 @@ class Orchestrator:
         config = config or CartographyConfig()
 
         # Incremental mode will be implemented fully (prune + re-run only changed files).
-        # For now, we keep the flag to match the final rubric API surface.
-        if incremental and config.incremental.enabled is False:
-            # If user passed --incremental but config disables it, prefer safety and run full.
-            incremental = False
+        changed_files: set[str] | None = None
+        if incremental:
+            if not config.incremental.enabled:
+                incremental = False
+            else:
+                changed_files = self._git_changed_files(repo_root, config.incremental.diff_range)
+                if not changed_files:
+                    incremental = False
+                else:
+                    trace.append(
+                        {
+                            "ts": self._utc_now(),
+                            "event": "incremental",
+                            "diff_range": config.incremental.diff_range,
+                            "changed_files": sorted(changed_files)[:500],
+                        }
+                    )
         
+        # If incremental, load previous graphs from target output and prune affected nodes/edges.
+        target_out = repo_root / ".cartography"
+        if incremental:
+            try:
+                self.kg.load_from_dir(target_out)
+            except Exception:
+                pass
+            try:
+                self.kg.prune_changed_files(changed_files or set())
+            except Exception:
+                pass
+
         # Surveyor Phase
         if "surveyor" in phases:
             trace.append({"ts": self._utc_now(), "event": "phase_start", "phase": "surveyor"})
-            self.surveyor.analyze(repo_root)
+            self.surveyor.analyze(repo_root, only_files=changed_files)
             trace.append({"ts": self._utc_now(), "event": "phase_end", "phase": "surveyor"})
         
         # Hydrologist Phase
         if "hydrologist" in phases:
             trace.append({"ts": self._utc_now(), "event": "phase_start", "phase": "hydrologist"})
-            self.hydrologist.analyze(repo_root)
+            self.hydrologist.analyze(repo_root, only_files=changed_files)
             trace.append({"ts": self._utc_now(), "event": "phase_end", "phase": "hydrologist"})
 
         # Semanticist Phase
@@ -81,7 +107,6 @@ class Orchestrator:
         
         # Serialization Phase
         # Always write artifacts into the analyzed repo's `.cartography/`.
-        target_out = repo_root / ".cartography"
         target_out.mkdir(exist_ok=True, parents=True)
 
         self.kg.serialize_module_graph(target_out / "module_graph.json")
@@ -119,6 +144,30 @@ class Orchestrator:
         from datetime import datetime, timezone
 
         return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    @staticmethod
+    def _git_changed_files(repo_root: Path, diff_range: str) -> set[str]:
+        """
+        Returns repo-relative POSIX paths changed in the given git diff range.
+        """
+        try:
+            cmd = [
+                "git",
+                "-c",
+                f"safe.directory={repo_root.resolve()}",
+                "diff",
+                "--name-only",
+                diff_range,
+            ]
+            r = subprocess.run(cmd, cwd=str(repo_root), capture_output=True, text=True, check=True)
+            out = set()
+            for line in r.stdout.splitlines():
+                p = line.strip().replace("\\", "/")
+                if p:
+                    out.add(p)
+            return out
+        except Exception:
+            return set()
 
 if __name__ == "__main__":
     _require_runtime_deps()

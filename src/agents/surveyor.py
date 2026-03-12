@@ -93,12 +93,16 @@ class Surveyor:
 
         return rank
 
-    def analyze(self, repo_path: str | Path):
+    def analyze(self, repo_path: str | Path, only_files: set[str] | None = None):
         print(f"Surveyor analyzing structure of {repo_path}")
-        
+
         base_path = Path(repo_path).resolve()
         velocity = self._get_git_velocity(base_path, days=30)
         module_exports: Dict[str, int] = {}
+
+        only_files_norm = None
+        if only_files:
+            only_files_norm = {str(Path(p).as_posix()) for p in only_files}
         
         for root, dirs, files in os.walk(base_path):
             dirs[:] = [
@@ -124,6 +128,8 @@ class Surveyor:
                     continue
 
                 rel_path = str(file_path.relative_to(base_path)).replace("\\", "/")
+                if only_files_norm is not None and rel_path not in only_files_norm:
+                    continue
                 language = {
                     ".py": "python",
                     ".sql": "sql",
