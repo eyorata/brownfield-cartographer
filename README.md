@@ -19,9 +19,18 @@ Run the core analysis pipeline on a given repository (local path or GitHub URL):
 ./.venv/Scripts/python.exe src/cli.py analyze /path/to/your/repo
 ```
 
-This runs the current analysis agents and generates output artifacts in the *target repo's* `.cartography/` directory, including:
+This runs the four-phase pipeline (Surveyor, Hydrologist, Semanticist, Archivist) and generates output artifacts in the *target repo's* `.cartography/` directory, including:
 - `module_graph.json`: The layout and structure.
 - `lineage_graph.json`: Data flow tracking.
+- `CODEBASE.md`: A generated overview (graph summary + top modules).
+- `onboarding_brief.md`: A generated Day-One-style brief (auto, based on graphs).
+- `cartography_trace.jsonl`: Phase trace events.
+
+Optionally also write a second copy of artifacts elsewhere (useful for committing artifacts from this tool repo):
+
+```bash
+./.venv/Scripts/python.exe src/cli.py analyze .\\_targets\\dbt-core --output-dir .\\.cartography
+```
 
 ### Query the Knowledge Graph
 Once analysis is complete, you can interact with the graph.
@@ -30,7 +39,21 @@ Once analysis is complete, you can interact with the graph.
 ./.venv/Scripts/python.exe src/cli.py query /path/to/analyzed/repo
 ```
 
-`query` is currently a stub (placeholder for the Navigator agent).
+Example interactive commands:
+
+- `stats`
+- `sources 25`
+- `sinks 25`
+- `blast <dataset_or_node>`
+- `trace up <node> 6`
+- `trace down <node> 6`
+- `module core/dbt/cli/main.py`
+
+### Run The Local UI
+
+```bash
+./.venv/Scripts/python.exe src/cli.py serve --host 127.0.0.1 --port 8000
+```
 
 ## Structure
 - `src/agents/`: The intelligent agents (Surveyor, Hydrologist, etc.)
