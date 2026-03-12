@@ -71,6 +71,92 @@ def _parse_trace(trace_path: Path) -> Dict[str, Any]:
     return {"phases": phases, "events": events}
 
 
+def _load_node_link(path: Path) -> Dict[str, Any]:
+    """
+    Load a NetworkX node-link JSON file. Supports both 'links' and 'edges' keys.
+    """
+    d = json.loads(path.read_text(encoding="utf-8"))
+    if "edges" in d and "links" not in d:
+        d["links"] = d["edges"]
+    if "links" in d and "edges" not in d:
+        d["edges"] = d["links"]
+    d.setdefault("nodes", [])
+    d.setdefault("edges", d.get("links", []))
+    return d
+
+
+def _trim_graph(d: Dict[str, Any], max_nodes: int = 120, max_edges: int = 600) -> Dict[str, Any]:
+    nodes = list(d.get("nodes") or [])
+    edges = list(d.get("edges") or [])
+
+    # Degree estimate for scoring.
+    deg: Dict[str, int] = {}
+    for e in edges:
+        s = str(e.get("source"))
+        t = str(e.get("target"))
+        deg[s] = deg.get(s, 0) + 1
+        deg[t] = deg.get(t, 0) + 1
+
+    def score(n: Dict[str, Any]) -> float:
+        nid = str(n.get("id") or n.get("path") or n.get("name") or "")
+        pr = n.get("pagerank")
+        if isinstance(pr, (int, float)):
+            return float(pr) * 1_000_000.0 + float(deg.get(nid, 0))
+        return float(deg.get(nid, 0))
+
+    nodes.sort(key=score, reverse=True)
+    max_nodes = max(10, min(int(max_nodes), 400))
+    max_edges = max(10, min(int(max_edges), 2000))
+
+    keep_nodes = nodes[:max_nodes]
+    keep_ids = {str(n.get("id") or n.get("path") or n.get("name")) for n in keep_nodes}
+
+    kept_edges = []
+    for e in edges:
+        s = str(e.get("source"))
+        t = str(e.get("target"))
+        if s in keep_ids and t in keep_ids:
+            kept_edges.append(e)
+        if len(kept_edges) >= max_edges:
+            break
+
+    out_nodes = []
+    for n in keep_nodes:
+        nid = str(n.get("id") or n.get("path") or n.get("name") or "")
+        label = n.get("name") or n.get("path") or nid
+        out_nodes.append(
+            {
+                "id": nid,
+                "label": str(label),
+                "kind": str(n.get("node_type") or n.get("language") or ""),
+                "attrs": n,
+            }
+        )
+
+    out_edges = []
+    for e in kept_edges:
+        out_edges.append(
+            {
+                "source": str(e.get("source")),
+                "target": str(e.get("target")),
+                "edge_type": e.get("edge_type"),
+                "source_file": e.get("source_file"),
+                "line_range": e.get("line_range"),
+            }
+        )
+
+    return {
+        "meta": {
+            "nodes_in_file": len(nodes),
+            "edges_in_file": len(edges),
+            "nodes_returned": len(out_nodes),
+            "edges_returned": len(out_edges),
+        },
+        "nodes": out_nodes,
+        "edges": out_edges,
+    }
+
+
 class _JobStore:
     def __init__(self):
         self._lock = threading.Lock()
@@ -316,6 +402,7 @@ _INDEX_HTML = """<!doctype html>
           <div class="pill"><span id="p_archivist" class="dot"></span><span>Archivist</span></div>
         </div>
         <div style="margin-top:12px;" class="small" id="paths"></div>
+        <div style="margin-top:10px;" class="small" id="views"></div>
       </section>
       <section class="card">
         <h2>Logs</h2>
@@ -330,6 +417,7 @@ _INDEX_HTML = """<!doctype html>
       const sText = document.getElementById('s_text');
       const jobMeta = document.getElementById('job_meta');
       const pathsEl = document.getElementById('paths');
+      const viewsEl = document.getElementById('views');
       const phaseDots = {
         surveyor: document.getElementById('p_surveyor'),
         hydrologist: document.getElementById('p_hydrologist'),
@@ -357,6 +445,7 @@ _INDEX_HTML = """<!doctype html>
         if (!path) return;
         runBtn.disabled = true;
         pathsEl.textContent = '';
+        viewsEl.textContent = '';
         Object.values(phaseDots).forEach(d => setDot(d, 'idle'));
         setStatus('starting');
         logEl.textContent = '';
@@ -392,6 +481,11 @@ _INDEX_HTML = """<!doctype html>
           if (data.output_dir) bits.push(`ui artifacts: <code>${data.output_dir}</code>`);
           pathsEl.innerHTML = bits.join('<br/>');
         }
+        if (data.status === 'done') {
+          viewsEl.innerHTML =
+            `View: <a href="/graph?id=${encodeURIComponent(currentJob)}&type=module" target="_blank">module graph</a>` +
+            ` | <a href="/graph?id=${encodeURIComponent(currentJob)}&type=lineage" target="_blank">lineage graph</a>`;
+        }
         if (data.status === 'done' || data.status === 'error') {
           runBtn.disabled = false;
           if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -399,6 +493,276 @@ _INDEX_HTML = """<!doctype html>
       }
 
       runBtn.addEventListener('click', start);
+    </script>
+  </body>
+</html>
+"""
+
+
+_GRAPH_HTML = """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cartography Graph</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: rgba(255,255,255,0.06);
+        --border: rgba(255,255,255,0.12);
+        --text: rgba(255,255,255,0.92);
+        --muted: rgba(255,255,255,0.70);
+        --accent: #f7c948;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+      body { margin: 0; background: radial-gradient(1000px 700px at 25% 10%, #1c2a55 0%, transparent 60%), linear-gradient(160deg, #0b1020, #0f1a2e); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Arial, sans-serif; min-height: 100vh; }
+      header { padding: 14px 14px 10px; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.16); position: sticky; top: 0; backdrop-filter: blur(10px); }
+      .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      .pill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); }
+      label { color: var(--muted); font-size: 12px; }
+      select, input { background: rgba(0,0,0,0.30); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-family: var(--mono); }
+      button { background: linear-gradient(180deg, rgba(247,201,72,0.95), rgba(247,201,72,0.70)); color: #171717; border: 1px solid rgba(255,255,255,0.18); border-radius: 12px; padding: 8px 12px; font-weight: 800; cursor: pointer; }
+      main { display: grid; grid-template-columns: 1fr 360px; gap: 10px; padding: 12px; }
+      @media (max-width: 920px) { main { grid-template-columns: 1fr; } }
+      .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+      canvas { display: block; width: 100%; height: 720px; }
+      .side { padding: 12px; }
+      pre { margin: 0; white-space: pre-wrap; word-break: break-word; background: rgba(0,0,0,0.30); border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; padding: 10px; font-family: var(--mono); font-size: 12px; line-height: 1.35; max-height: 720px; overflow: auto; }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .small { color: var(--muted); font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="row">
+        <div class="pill"><strong>Graph</strong></div>
+        <div class="pill"><label>job</label><span id="job" style="font-family: var(--mono);"></span></div>
+        <div class="pill">
+          <label>type</label>
+          <select id="type">
+            <option value="module">module</option>
+            <option value="lineage">lineage</option>
+          </select>
+        </div>
+        <div class="pill"><label>max nodes</label><input id="max_nodes" type="number" min="10" max="400" value="120" /></div>
+        <div class="pill"><label>max edges</label><input id="max_edges" type="number" min="10" max="2000" value="600" /></div>
+        <button id="load">Load</button>
+        <span class="small">Drag nodes. Click a node for details.</span>
+      </div>
+    </header>
+    <main>
+      <section class="card">
+        <canvas id="c"></canvas>
+      </section>
+      <section class="card side">
+        <div class="small" id="meta"></div>
+        <div style="height:10px;"></div>
+        <pre id="detail">(no node selected)</pre>
+      </section>
+    </main>
+    <script>
+      const qs = new URLSearchParams(location.search);
+      const jobId = qs.get('id') || '';
+      const initialType = qs.get('type') || 'module';
+
+      document.getElementById('job').textContent = jobId || '(none)';
+      const typeSel = document.getElementById('type');
+      typeSel.value = initialType;
+
+      const maxNodesInp = document.getElementById('max_nodes');
+      const maxEdgesInp = document.getElementById('max_edges');
+      const metaEl = document.getElementById('meta');
+      const detailEl = document.getElementById('detail');
+
+      const canvas = document.getElementById('c');
+      const ctx = canvas.getContext('2d');
+
+      function resize() {
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(rect.width * dpr);
+        canvas.height = Math.floor(rect.height * dpr);
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+      }
+      window.addEventListener('resize', resize);
+      resize();
+
+      let nodes = [];
+      let edges = [];
+      let nodeById = new Map();
+      let dragging = null;
+      let hover = null;
+      let simTimer = null;
+
+      function rand(min, max) { return min + Math.random() * (max - min); }
+
+      function resetPositions() {
+        const w = canvas.getBoundingClientRect().width;
+        const h = canvas.getBoundingClientRect().height;
+        for (const n of nodes) {
+          if (!Number.isFinite(n.x)) n.x = rand(40, w - 40);
+          if (!Number.isFinite(n.y)) n.y = rand(40, h - 40);
+          n.vx = 0; n.vy = 0;
+        }
+      }
+
+      function nodeRadius(n) {
+        const k = (n.kind || '').toLowerCase();
+        if (k === 'python' || k === 'sql' || k === 'yaml') return 4.2;
+        return 4.6;
+      }
+
+      function nodeColor(n) {
+        const k = (n.kind || '').toLowerCase();
+        if (k.includes('python')) return 'rgba(101, 193, 255, 0.95)';
+        if (k.includes('sql')) return 'rgba(140, 255, 180, 0.95)';
+        if (k.includes('yaml')) return 'rgba(255, 201, 72, 0.95)';
+        return 'rgba(255,255,255,0.85)';
+      }
+
+      function draw() {
+        const w = canvas.getBoundingClientRect().width;
+        const h = canvas.getBoundingClientRect().height;
+        ctx.clearRect(0,0,w,h);
+
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+        ctx.beginPath();
+        for (const e of edges) {
+          const a = nodeById.get(e.source);
+          const b = nodeById.get(e.target);
+          if (!a || !b) continue;
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+        }
+        ctx.stroke();
+
+        for (const n of nodes) {
+          const r = nodeRadius(n);
+          ctx.beginPath();
+          ctx.fillStyle = (hover && hover.id === n.id) ? 'rgba(247,201,72,0.95)' : nodeColor(n);
+          ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function tick() {
+        const w = canvas.getBoundingClientRect().width;
+        const h = canvas.getBoundingClientRect().height;
+
+        const repulse = 1400.0;
+        const spring = 0.006;
+        const damp = 0.85;
+
+        for (let i=0; i<nodes.length; i++) {
+          const a = nodes[i];
+          for (let j=i+1; j<nodes.length; j++) {
+            const b = nodes[j];
+            const dx = a.x - b.x;
+            const dy = a.y - b.y;
+            const d2 = dx*dx + dy*dy + 0.01;
+            const f = repulse / d2;
+            const fx = f * dx;
+            const fy = f * dy;
+            a.vx += fx; a.vy += fy;
+            b.vx -= fx; b.vy -= fy;
+          }
+        }
+
+        for (const e of edges) {
+          const a = nodeById.get(e.source);
+          const b = nodeById.get(e.target);
+          if (!a || !b) continue;
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.sqrt(dx*dx + dy*dy) + 0.001;
+          const target = 40;
+          const k = spring * (dist - target);
+          const fx = k * (dx / dist);
+          const fy = k * (dy / dist);
+          a.vx += fx; a.vy += fy;
+          b.vx -= fx; b.vy -= fy;
+        }
+
+        for (const n of nodes) {
+          if (dragging && dragging.id === n.id) {
+            n.vx = 0; n.vy = 0;
+            continue;
+          }
+          n.vx *= damp; n.vy *= damp;
+          n.x += n.vx * 0.001;
+          n.y += n.vy * 0.001;
+          n.x = Math.max(10, Math.min(w - 10, n.x));
+          n.y = Math.max(10, Math.min(h - 10, n.y));
+        }
+
+        draw();
+      }
+
+      function startSim() {
+        if (simTimer) clearInterval(simTimer);
+        simTimer = setInterval(tick, 16);
+      }
+
+      function stopSim() {
+        if (simTimer) { clearInterval(simTimer); simTimer = null; }
+      }
+
+      function hitTest(x, y) {
+        let best = null;
+        let bestD = 1e9;
+        for (const n of nodes) {
+          const dx = n.x - x;
+          const dy = n.y - y;
+          const d2 = dx*dx + dy*dy;
+          const r = nodeRadius(n) + 4;
+          if (d2 <= r*r && d2 < bestD) { best = n; bestD = d2; }
+        }
+        return best;
+      }
+
+      function canvasXY(evt) {
+        const rect = canvas.getBoundingClientRect();
+        return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+      }
+
+      canvas.addEventListener('mousedown', (evt) => {
+        const {x,y} = canvasXY(evt);
+        const n = hitTest(x,y);
+        if (n) dragging = n;
+      });
+      canvas.addEventListener('mousemove', (evt) => {
+        const {x,y} = canvasXY(evt);
+        if (dragging) { dragging.x = x; dragging.y = y; return; }
+        hover = hitTest(x,y);
+      });
+      canvas.addEventListener('mouseup', () => { dragging = null; });
+      canvas.addEventListener('click', (evt) => {
+        const {x,y} = canvasXY(evt);
+        const n = hitTest(x,y);
+        if (!n) return;
+        detailEl.textContent = JSON.stringify(n.attrs || {}, null, 2);
+      });
+
+      async function loadGraph() {
+        stopSim();
+        detailEl.textContent = '(no node selected)';
+        const t = typeSel.value;
+        const mn = parseInt(maxNodesInp.value || '120', 10);
+        const me = parseInt(maxEdgesInp.value || '600', 10);
+        const resp = await fetch(`/api/graph?id=${encodeURIComponent(jobId)}&type=${encodeURIComponent(t)}&max_nodes=${encodeURIComponent(mn)}&max_edges=${encodeURIComponent(me)}`);
+        const data = await resp.json();
+        nodes = (data.nodes || []).map(n => ({...n, x: NaN, y: NaN, vx: 0, vy: 0}));
+        edges = data.edges || [];
+        nodeById = new Map(nodes.map(n => [n.id, n]));
+        resetPositions();
+        metaEl.textContent = JSON.stringify(data.meta || {}, null, 0);
+        startSim();
+      }
+
+      document.getElementById('load').addEventListener('click', loadGraph);
+      loadGraph();
     </script>
   </body>
 </html>
@@ -430,6 +794,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send_text(_INDEX_HTML, content_type="text/html; charset=utf-8")
             return
 
+        if parsed.path == "/graph":
+            self._send_text(_GRAPH_HTML, content_type="text/html; charset=utf-8")
+            return
+
         if parsed.path == "/api/job":
             qs = parse_qs(parsed.query or "")
             job_id = (qs.get("id") or [""])[0]
@@ -454,6 +822,46 @@ class Handler(BaseHTTPRequestHandler):
                     "trace_events": trace_info.get("events"),
                 }
             )
+            return
+
+        if parsed.path == "/api/graph":
+            qs = parse_qs(parsed.query or "")
+            job_id = (qs.get("id") or [""])[0]
+            gtype = ((qs.get("type") or ["module"])[0] or "module").lower()
+            try:
+                max_nodes = int((qs.get("max_nodes") or ["120"])[0])
+            except Exception:
+                max_nodes = 120
+            try:
+                max_edges = int((qs.get("max_edges") or ["600"])[0])
+            except Exception:
+                max_edges = 600
+
+            base_dir = None
+            if job_id:
+                j = JOBS.get(job_id)
+                if j:
+                    base_dir = Path(j["output_dir"]).resolve()
+            if base_dir is None:
+                base_dir = _CARTO_DIR
+
+            if gtype == "module":
+                fp = base_dir / "module_graph.json"
+            else:
+                fp = base_dir / "lineage_graph.json"
+
+            if not fp.exists():
+                self._send_json({"error": "graph not found", "path": str(fp)}, status=404)
+                return
+
+            try:
+                d = _load_node_link(fp)
+                trimmed = _trim_graph(d, max_nodes=max_nodes, max_edges=max_edges)
+                trimmed["meta"]["file"] = str(fp)
+                trimmed["meta"]["type"] = gtype
+                self._send_json(trimmed, status=200)
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
             return
 
         self._send_json({"error": "not found"}, status=404)
@@ -497,4 +905,3 @@ def serve(host: str = "127.0.0.1", port: int = 8000) -> None:
     print(f"UI server running on http://{host}:{port}")
     print(f"UI working dir: {_RUNS_DIR}")
     server.serve_forever()
-
