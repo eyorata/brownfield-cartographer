@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
+import networkx as nx
+
 
 _ROOT = Path(__file__).resolve().parents[1]
 _CARTO_DIR = (_ROOT / ".cartography").resolve()
@@ -145,12 +147,36 @@ def _trim_graph(d: Dict[str, Any], max_nodes: int = 120, max_edges: int = 600) -
             }
         )
 
+    # NetworkX-based layout (positions in roughly [-1, 1]).
+    # Use an undirected graph for a more stable "map" layout.
+    g = nx.Graph()
+    for n in out_nodes:
+        g.add_node(n["id"])
+    for e in out_edges:
+        if e["source"] in g and e["target"] in g:
+            g.add_edge(e["source"], e["target"])
+
+    pos = {}
+    try:
+        # k controls spacing; for larger graphs, this helps avoid node clumping.
+        k = 1.0 / max(5, int(len(out_nodes) ** 0.5))
+        pos = nx.spring_layout(g, seed=42, k=k, iterations=80)
+    except Exception:
+        pos = {}
+
+    for n in out_nodes:
+        p = pos.get(n["id"])
+        if p is not None:
+            n["x"] = float(p[0])
+            n["y"] = float(p[1])
+
     return {
         "meta": {
             "nodes_in_file": len(nodes),
             "edges_in_file": len(edges),
             "nodes_returned": len(out_nodes),
             "edges_returned": len(out_edges),
+            "layout": "networkx.spring_layout",
         },
         "nodes": out_nodes,
         "edges": out_edges,
@@ -584,6 +610,16 @@ _GRAPH_HTML = """<!doctype html>
         canvas.width = Math.floor(rect.width * dpr);
         canvas.height = Math.floor(rect.height * dpr);
         ctx.setTransform(dpr,0,0,dpr,0,0);
+        // If nodes have normalized coords, remap them on resize (unless user dragged them).
+        const w = rect.width;
+        const h = rect.height;
+        for (const n of nodes) {
+          if (Number.isFinite(n.xn) && Number.isFinite(n.yn) && !n.userMoved) {
+            n.x = 40 + ((n.xn + 1) / 2) * (w - 80);
+            n.y = 40 + ((n.yn + 1) / 2) * (h - 80);
+          }
+        }
+        draw();
       }
       window.addEventListener('resize', resize);
       resize();
@@ -601,9 +637,13 @@ _GRAPH_HTML = """<!doctype html>
         const w = canvas.getBoundingClientRect().width;
         const h = canvas.getBoundingClientRect().height;
         for (const n of nodes) {
-          if (!Number.isFinite(n.x)) n.x = rand(40, w - 40);
-          if (!Number.isFinite(n.y)) n.y = rand(40, h - 40);
-          n.vx = 0; n.vy = 0;
+          if (Number.isFinite(n.xn) && Number.isFinite(n.yn)) {
+            n.x = 40 + ((n.xn + 1) / 2) * (w - 80);
+            n.y = 40 + ((n.yn + 1) / 2) * (h - 80);
+          } else {
+            if (!Number.isFinite(n.x)) n.x = rand(40, w - 40);
+            if (!Number.isFinite(n.y)) n.y = rand(40, h - 40);
+          }
         }
       }
 
@@ -647,67 +687,10 @@ _GRAPH_HTML = """<!doctype html>
         }
       }
 
-      function tick() {
-        const w = canvas.getBoundingClientRect().width;
-        const h = canvas.getBoundingClientRect().height;
-
-        const repulse = 1400.0;
-        const spring = 0.006;
-        const damp = 0.85;
-
-        for (let i=0; i<nodes.length; i++) {
-          const a = nodes[i];
-          for (let j=i+1; j<nodes.length; j++) {
-            const b = nodes[j];
-            const dx = a.x - b.x;
-            const dy = a.y - b.y;
-            const d2 = dx*dx + dy*dy + 0.01;
-            const f = repulse / d2;
-            const fx = f * dx;
-            const fy = f * dy;
-            a.vx += fx; a.vy += fy;
-            b.vx -= fx; b.vy -= fy;
-          }
-        }
-
-        for (const e of edges) {
-          const a = nodeById.get(e.source);
-          const b = nodeById.get(e.target);
-          if (!a || !b) continue;
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const dist = Math.sqrt(dx*dx + dy*dy) + 0.001;
-          const target = 40;
-          const k = spring * (dist - target);
-          const fx = k * (dx / dist);
-          const fy = k * (dy / dist);
-          a.vx += fx; a.vy += fy;
-          b.vx -= fx; b.vy -= fy;
-        }
-
-        for (const n of nodes) {
-          if (dragging && dragging.id === n.id) {
-            n.vx = 0; n.vy = 0;
-            continue;
-          }
-          n.vx *= damp; n.vy *= damp;
-          n.x += n.vx * 0.001;
-          n.y += n.vy * 0.001;
-          n.x = Math.max(10, Math.min(w - 10, n.x));
-          n.y = Math.max(10, Math.min(h - 10, n.y));
-        }
-
-        draw();
-      }
-
-      function startSim() {
-        if (simTimer) clearInterval(simTimer);
-        simTimer = setInterval(tick, 16);
-      }
-
-      function stopSim() {
-        if (simTimer) { clearInterval(simTimer); simTimer = null; }
-      }
+      // Layout is computed server-side via NetworkX. No client force simulation needed.
+      function tick() { /* no-op */ }
+      function startSim() { /* no-op */ }
+      function stopSim() { /* no-op */ }
 
       function hitTest(x, y) {
         let best = null;
@@ -734,8 +717,9 @@ _GRAPH_HTML = """<!doctype html>
       });
       canvas.addEventListener('mousemove', (evt) => {
         const {x,y} = canvasXY(evt);
-        if (dragging) { dragging.x = x; dragging.y = y; return; }
+        if (dragging) { dragging.x = x; dragging.y = y; dragging.userMoved = true; draw(); return; }
         hover = hitTest(x,y);
+        draw();
       });
       canvas.addEventListener('mouseup', () => { dragging = null; });
       canvas.addEventListener('click', (evt) => {
@@ -753,12 +737,12 @@ _GRAPH_HTML = """<!doctype html>
         const me = parseInt(maxEdgesInp.value || '600', 10);
         const resp = await fetch(`/api/graph?id=${encodeURIComponent(jobId)}&type=${encodeURIComponent(t)}&max_nodes=${encodeURIComponent(mn)}&max_edges=${encodeURIComponent(me)}`);
         const data = await resp.json();
-        nodes = (data.nodes || []).map(n => ({...n, x: NaN, y: NaN, vx: 0, vy: 0}));
+        nodes = (data.nodes || []).map(n => ({...n, xn: (typeof n.x === 'number' ? n.x : NaN), yn: (typeof n.y === 'number' ? n.y : NaN), x: NaN, y: NaN, userMoved: false}));
         edges = data.edges || [];
         nodeById = new Map(nodes.map(n => [n.id, n]));
         resetPositions();
         metaEl.textContent = JSON.stringify(data.meta || {}, null, 0);
-        startSim();
+        draw();
       }
 
       document.getElementById('load').addEventListener('click', loadGraph);
