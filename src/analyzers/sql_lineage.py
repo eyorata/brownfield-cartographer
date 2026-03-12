@@ -12,7 +12,10 @@ if str(_SRC_DIR) not in sys.path:
 
 class SQLLineageAnalyzer:
     def __init__(self):
-        pass
+        # Aggregate parse failures to avoid noisy logs on Jinja-heavy SQL.
+        # Each item: {"error": str, "snippet": str}
+        self.parse_failures: List[Dict[str, str]] = []
+        self._parse_failures_max = 25
 
     def _try_parse(self, sql_query: str, dialects: List[str]) -> tuple[List[exp.Expression], Optional[str]]:
         for d in dialects:
@@ -51,7 +54,14 @@ class SQLLineageAnalyzer:
                 statements = parse(sql_query)
                 dialect_used = "auto"
             except Exception as e:
-                print(f"Failed to parse SQL: {e}")
+                if len(self.parse_failures) < self._parse_failures_max:
+                    snippet = sql_query.strip().splitlines()[:20]
+                    self.parse_failures.append(
+                        {
+                            "error": str(e),
+                            "snippet": "\n".join(snippet),
+                        }
+                    )
                 statements = []
                 dialect_used = None
         
@@ -144,3 +154,11 @@ class SQLLineageAnalyzer:
             "ref_line_numbers": ref_locations,
             "source_line_numbers": source_locations,
         }
+
+    def consume_parse_failures(self) -> List[Dict[str, str]]:
+        """
+        Return and clear aggregated parse failures.
+        """
+        out = list(self.parse_failures)
+        self.parse_failures.clear()
+        return out

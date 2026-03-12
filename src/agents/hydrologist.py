@@ -171,6 +171,21 @@ class Hydrologist:
                                 )
                     except Exception as e:
                         print(f"Failed to process {file_path}: {e}")
+
+        # Reduce noise: sqlglot fails on Jinja-heavy dbt SQL. Summarize instead of spamming logs.
+        try:
+            failures = sql_analyzer.consume_parse_failures()
+        except Exception:
+            failures = []
+        if failures:
+            print(f"SQL parse failures (sqlglot): {len(failures)} samples (Jinja/templates are expected). Showing up to 5:")
+            for f in failures[:5]:
+                err = f.get("error") or ""
+                snip = f.get("snippet") or ""
+                print(f"- {err}")
+                if snip:
+                    print(snip)
+                    print("")
                             
                 elif file.endswith(('.yml', '.yaml')):
                     # Only parse dbt schema-style YAML (models/sources). Skip dbt_project.yml and other non-schema files.
