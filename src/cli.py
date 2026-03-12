@@ -121,13 +121,12 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    repo_path_value = args.path
-    if _is_git_url(repo_path_value):
-        repo_path = _clone_github_repo(repo_path_value, Path(".cartography") / "_repos")
-    else:
-        repo_path = Path(repo_path_value)
-    
     if args.command == "analyze":
+        repo_path_value = args.path
+        if _is_git_url(repo_path_value):
+            repo_path = _clone_github_repo(repo_path_value, Path(".cartography") / "_repos")
+        else:
+            repo_path = Path(repo_path_value)
         print(f"Running analysis on: {repo_path}")
         _require_runtime_deps()
         from config import load_config
@@ -137,6 +136,11 @@ def main():
         orchestrator = Orchestrator()
         orchestrator.run_analysis(repo_path, output_dir=args.output_dir, config=cfg, incremental=bool(args.incremental))
     elif args.command == "query":
+        repo_path_value = args.path
+        if _is_git_url(repo_path_value):
+            repo_path = _clone_github_repo(repo_path_value, Path(".cartography") / "_repos")
+        else:
+            repo_path = Path(repo_path_value)
         print(f"Starting Navigator query session for: {repo_path}")
         _require_runtime_deps()
         from config import load_config
