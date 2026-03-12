@@ -19,6 +19,7 @@ venv.bak/
 !.cartography/cartography_trace.jsonl
 _targets/
 _tmp/
+artifacts/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

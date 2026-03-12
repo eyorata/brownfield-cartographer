@@ -26,6 +26,26 @@ class OpenAICompatClient:
         self.api_key = api_key
         self.timeout_s = int(timeout_s)
 
+    def get_models(self, timeout_s: int = 3) -> Dict[str, Any]:
+        """
+        Best-effort check used to detect whether a local OpenAI-compatible server is running.
+        """
+        url = f"{self.base_url}/models"
+        headers = {}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        req = Request(url=url, headers=headers, method="GET")
+        with urlopen(req, timeout=int(timeout_s)) as resp:
+            body = resp.read().decode("utf-8", errors="ignore")
+        return json.loads(body)
+
+    def is_available(self, timeout_s: int = 3) -> bool:
+        try:
+            self.get_models(timeout_s=timeout_s)
+            return True
+        except Exception:
+            return False
+
     def chat_completions(
         self,
         *,
@@ -69,4 +89,3 @@ class OpenAICompatClient:
                     continue
                 raise
         raise RuntimeError(str(last_err) if last_err else "LLM request failed")
-

@@ -232,6 +232,8 @@ class Semanticist:
                 api_key=config.llm.api_key,
                 timeout_s=config.llm.timeout_s,
             )
+            if not llm_client.is_available(timeout_s=3):
+                llm_client = None
 
         for node_id, attrs in list(self.kg.module_graph.nodes(data=True)):
             try:
@@ -311,6 +313,11 @@ class Semanticist:
             api_key=config.llm.api_key,
             timeout_s=config.llm.timeout_s,
         )
+        if not llm_client.is_available(timeout_s=3):
+            self.kg.module_graph.graph["day_one_answers"] = {
+                "error": "LLM unavailable for day-one answers. Start LM Studio server and re-run semanticist.",
+            }
+            return
 
         # Evidence selection: top modules by pagerank + top velocity + lineage sources/sinks.
         top_mods = sorted(

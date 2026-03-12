@@ -1,2 +1,2 @@
-from .openai_compat import OpenAICompatClient, ChatMessage
+from .openai_compat import ChatMessage, OpenAICompatClient
 
