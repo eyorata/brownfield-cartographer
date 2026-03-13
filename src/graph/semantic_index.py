@@ -111,6 +111,41 @@ class SemanticIndex:
             ],
         }
 
+    def as_map(self) -> Dict[str, SemanticIndexEntry]:
+        return {e.module_path: e for e in self.entries}
+
+    def updated(
+        self,
+        *,
+        module_texts: List[Tuple[str, str]],
+        all_module_paths: Optional[Iterable[str]] = None,
+        client: Optional[OpenAICompatClient] = None,
+    ) -> "SemanticIndex":
+        """
+        Incremental update: recompute embeddings for provided module_texts and keep the rest.
+        If all_module_paths is provided, drop entries not present in that set.
+        """
+        existing = self.as_map()
+        paths = [p for p, _ in module_texts]
+        texts = [t for _, t in module_texts]
+        embs = embed_texts(
+            texts,
+            client=client if self.embedding_kind == "embedding" else None,
+            model=self.embedding_model,
+        )
+        for p, e, t in zip(paths, embs, texts, strict=False):
+            existing[str(p)] = SemanticIndexEntry(module_path=str(p), embedding=list(e), text=str(t))
+
+        if all_module_paths is not None:
+            allowed = {str(x) for x in all_module_paths}
+            for k in list(existing.keys()):
+                if k not in allowed:
+                    existing.pop(k, None)
+
+        entries = list(existing.values())
+        entries.sort(key=lambda x: x.module_path)
+        return SemanticIndex(entries=entries, embedding_kind=self.embedding_kind, embedding_model=self.embedding_model)
+
     @classmethod
     def from_json(cls, data: Dict[str, Any]) -> "SemanticIndex":
         kind = str(data.get("embedding_kind") or "hash_embedding")

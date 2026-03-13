@@ -188,6 +188,17 @@ class TreeSitterAnalyzer:
             sl = s.lower()
             return any(k in sl for k in (" select ", "\nselect ", " from ", " join ", " insert ", " update ", " merge "))
 
+        pandas_module_aliases: set[str] = set()
+        pandas_from_aliases: set[str] = set()
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Import):
+                for alias in n.names:
+                    if alias.name == "pandas":
+                        pandas_module_aliases.add(alias.asname or "pandas")
+            if isinstance(n, ast.ImportFrom) and (n.module or "") == "pandas":
+                for alias in n.names:
+                    pandas_from_aliases.add(alias.asname or alias.name)
+
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
@@ -253,12 +264,27 @@ class TreeSitterAnalyzer:
 
                 op_type = ""
                 direction = ""
-                if func_name in pandas_reads or call_path.endswith(tuple("." + x for x in pandas_reads)):
+                receiver = None
+                if isinstance(node.func, ast.Attribute):
+                    receiver = node.func.value
+
+                # pandas reads: pd.read_csv(...) or read_csv(...) if imported from pandas
+                if isinstance(node.func, ast.Attribute) and isinstance(receiver, ast.Name):
+                    if receiver.id in pandas_module_aliases and func_name in pandas_reads:
+                        op_type = f"pandas_{func_name}"
+                        direction = "read"
+                elif isinstance(node.func, ast.Name) and func_name in pandas_reads and func_name in pandas_from_aliases:
                     op_type = f"pandas_{func_name}"
                     direction = "read"
-                elif func_name in pandas_writes or call_path.endswith(tuple("." + x for x in pandas_writes)):
-                    op_type = f"pandas_{func_name}"
-                    direction = "write"
+
+                # pandas writes: df.to_csv(...). Avoid common false positives like self.to_json().
+                if not op_type and isinstance(node.func, ast.Attribute) and func_name in pandas_writes:
+                    if isinstance(receiver, ast.Name) and receiver.id in {"self", "cls"}:
+                        op_type = ""
+                    else:
+                        op_type = f"pandas_{func_name}"
+                        direction = "write"
+
                 elif call_path.startswith("spark.read.") and func_name.lower() in spark_reads:
                     op_type = f"pyspark_read_{func_name.lower()}"
                     direction = "read"
@@ -268,7 +294,10 @@ class TreeSitterAnalyzer:
                 elif call_path.startswith("spark.sql") or func_name == "sql":
                     op_type = "pyspark_sql"
                     direction = "sql"
-                elif func_name == "execute" or call_path.endswith(".execute"):
+                elif (func_name == "execute" or call_path.endswith(".execute")) and not (
+                    isinstance(receiver, ast.Name) and receiver.id in {"self", "cls"}
+                ):
+                    # SQLAlchemy / DBAPI execute. We rely on sql_literals extraction for grounding.
                     op_type = "sqlalchemy_execute"
                     direction = "sql"
 

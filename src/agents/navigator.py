@@ -299,6 +299,7 @@ class Navigator:
         step: int
         pending_tool: Optional[Dict[str, Any]]
         final: Optional[str]
+        citations: List[str]
 
     def _llm_node(self, state: "Navigator._NavState") -> "Navigator._NavState":
         max_steps = 6
@@ -375,6 +376,10 @@ class Navigator:
 
         obs = {"tool": name, "ok": result["ok"], "result": result["result"], "citations": result["citations"]}
         state.setdefault("messages", []).append({"role": "assistant", "content": json.dumps(obs)})
+        try:
+            state.setdefault("citations", []).extend([str(c) for c in (result.get("citations") or [])])
+        except Exception:
+            pass
         state["pending_tool"] = None
         state["step"] = int(state.get("step", 0)) + 1
         return state
@@ -404,6 +409,20 @@ class Navigator:
             "step": 0,
             "pending_tool": None,
             "final": None,
+            "citations": [],
         }
         out = app.invoke(state)
-        return str(out.get("final") or "(no answer)")
+        ans = str(out.get("final") or "(no answer)")
+        if self.config.navigator.citations:
+            cites = [str(c) for c in (out.get("citations") or []) if str(c).strip()]
+            # Deduplicate but preserve order
+            seen = set()
+            uniq: List[str] = []
+            for c in cites:
+                if c in seen:
+                    continue
+                seen.add(c)
+                uniq.append(c)
+            if uniq:
+                ans = ans.rstrip() + "\n\nCitations:\n" + "\n".join([f"- {c}" for c in uniq[:30]])
+        return ans

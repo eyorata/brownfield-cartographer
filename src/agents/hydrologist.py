@@ -86,114 +86,211 @@ class Hydrologist:
                         continue
 
                     ops = data.get("data_ops", []) or []
-                    if not ops:
-                        continue
+                    # Also parse Airflow DAG dependencies in Python (if present).
+                    airflow_tasks = []
+                    try:
+                        airflow_tasks = yaml_parser.parse_airflow_py(str(file_path))
+                    except Exception:
+                        airflow_tasks = []
 
                     # Represent each python file as a transformation node.
-                    sources: set[str] = set()
-                    targets: set[str] = set()
-                    src_lr: dict[str, str] = {}
-                    tgt_lr: dict[str, str] = {}
-                    min_line = 10**9
-                    max_line = 1
-                    for op in ops:
-                        op_type = str(op.get("type") or "")
-                        direction = str(op.get("direction") or "")
-                        line_range = str(op.get("line_range") or "1-1")
-                        try:
-                            a, b = [int(x) for x in line_range.split("-", 1)]
-                            min_line = min(min_line, a)
-                            max_line = max(max_line, b)
-                        except Exception:
-                            pass
+                    if ops:
+                        sources: set[str] = set()
+                        targets: set[str] = set()
+                        src_lr: dict[str, str] = {}
+                        tgt_lr: dict[str, str] = {}
+                        min_line = 10**9
+                        max_line = 1
+                        for op in ops:
+                            op_type = str(op.get("type") or "")
+                            direction = str(op.get("direction") or "")
+                            line_range = str(op.get("line_range") or "1-1")
+                            try:
+                                a, b = [int(x) for x in line_range.split("-", 1)]
+                                min_line = min(min_line, a)
+                                max_line = max(max_line, b)
+                            except Exception:
+                                pass
 
-                        call_path = str(op.get("call_path") or "")
-                        args = str(op.get("args") or "")
-                        literals = op.get("literals") or []
-                        if op.get("unresolved"):
-                            unresolved_python_ops.append(
+                            call_path = str(op.get("call_path") or "")
+                            args = str(op.get("args") or "")
+                            literals = op.get("literals") or []
+                            if op.get("unresolved"):
+                                unresolved_python_ops.append(
+                                    {
+                                        "file": rel_path,
+                                        "type": op_type,
+                                        "call_path": call_path,
+                                        "args": args[:500],
+                                        "line_range": line_range,
+                                    }
+                                )
+
+                            # File/table-like literals (pandas/pyspark read/write)
+                            if direction in {"read", "write"}:
+                                for lit in [str(x) for x in literals if isinstance(x, str) and x.strip()]:
+                                    if direction == "read":
+                                        sources.add(lit)
+                                        src_lr.setdefault(lit, line_range)
+                                    else:
+                                        targets.add(lit)
+                                        tgt_lr.setdefault(lit, line_range)
+
+                            # Inline SQL strings inside Python calls (read_sql/execute/spark.sql).
+                            sql_literals = op.get("sql_literals") or []
+                            for sql_text in [str(x) for x in sql_literals if isinstance(x, str) and x.strip()]:
+                                if not self._looks_like_sql(sql_text):
+                                    continue
+                                try:
+                                    deps = sql_analyzer.extract_dependencies(sql_text, dialect="postgres")
+                                except Exception:
+                                    deps = {}
+                                for s in deps.get("sources", []) or []:
+                                    sources.add(str(s))
+                                    src_lr.setdefault(str(s), line_range)
+                                for t in deps.get("targets", []) or []:
+                                    targets.add(str(t))
+                                    tgt_lr.setdefault(str(t), line_range)
+
+                        if sources or targets:
+                            t_node = TransformationNode(
+                                source_datasets=sorted(sources),
+                                target_datasets=sorted(targets),
+                                transformation_type="python",
+                                source_file=rel_path,
+                                line_range=f"{min_line}-{max_line}" if min_line != 10**9 else "1-1",
+                            )
+                            self.kg.add_transformation_node(t_node)
+
+                            for s in t_node.source_datasets:
+                                self._ensure_dataset(s, owner="python")
+                                self.kg.add_consumes_edge(
+                                    ConsumesEdge(
+                                        transformation=rel_path,
+                                        dataset=s,
+                                        transformation_type="python",
+                                        source_file=rel_path,
+                                        line_range=str(src_lr.get(s) or "1-1"),
+                                    )
+                                )
+                            for t in t_node.target_datasets:
+                                self._ensure_dataset(t, owner="python")
+                                self.kg.add_produces_edge(
+                                    ProducesEdge(
+                                        transformation=rel_path,
+                                        dataset=t,
+                                        transformation_type="python",
+                                        source_file=rel_path,
+                                        line_range=str(tgt_lr.get(t) or "1-1"),
+                                    )
+                                )
+                            if trace is not None:
+                                trace.append(
+                                    {
+                                        "ts": self._utc_now(),
+                                        "agent": "hydrologist",
+                                        "action": "python_lineage",
+                                        "file": rel_path,
+                                        "method": "static",
+                                        "confidence": 0.75,
+                                        "sources": sorted(sources)[:100],
+                                        "targets": sorted(targets)[:100],
+                                    }
+                                )
+
+                    # Airflow DAG parsing (Python).
+                    if airflow_tasks:
+                        created = 0
+                        edges = 0
+                        for item in airflow_tasks:
+                            if item.get("type") != "task":
+                                continue
+                            task_id = str(item.get("id") or "").strip()
+                            if not task_id:
+                                continue
+                            node_id = f"airflow_task:{rel_path}:{task_id}"
+                            lr = str(item.get("line_range") or "1-1")
+                            if node_id not in self.kg.lineage_graph:
+                                self.kg.add_transformation_node(
+                                    TransformationNode(
+                                        source_datasets=[],
+                                        target_datasets=[],
+                                        transformation_type="airflow_task",
+                                        source_file=node_id,
+                                        line_range=lr,
+                                    )
+                                )
+                                created += 1
+
+                            # Optional: SQL embedded in operator args.
+                            sql_lits = item.get("sql_literals") or []
+                            for sql_text in [str(x) for x in sql_lits if isinstance(x, str) and x.strip()]:
+                                if not self._looks_like_sql(sql_text):
+                                    continue
+                                try:
+                                    deps = sql_analyzer.extract_dependencies(sql_text, dialect="postgres")
+                                except Exception:
+                                    deps = {}
+                                for s in deps.get("sources", []) or []:
+                                    self._ensure_dataset(str(s), owner="airflow_sql")
+                                    self.kg.add_consumes_edge(
+                                        ConsumesEdge(
+                                            transformation=node_id,
+                                            dataset=str(s),
+                                            transformation_type="airflow_task",
+                                            source_file=rel_path,
+                                            line_range=lr,
+                                        )
+                                    )
+                                for t in deps.get("targets", []) or []:
+                                    self._ensure_dataset(str(t), owner="airflow_sql")
+                                    self.kg.add_produces_edge(
+                                        ProducesEdge(
+                                            transformation=node_id,
+                                            dataset=str(t),
+                                            transformation_type="airflow_task",
+                                            source_file=rel_path,
+                                            line_range=lr,
+                                        )
+                                    )
+
+                            for upstream in item.get("depends_on", []) or []:
+                                up = str(upstream).strip()
+                                if not up:
+                                    continue
+                                upstream_id = f"airflow_task:{rel_path}:{up}"
+                                if upstream_id not in self.kg.lineage_graph:
+                                    self.kg.add_transformation_node(
+                                        TransformationNode(
+                                            source_datasets=[],
+                                            target_datasets=[],
+                                            transformation_type="airflow_task",
+                                            source_file=upstream_id,
+                                            line_range="1-1",
+                                        )
+                                    )
+                                self.kg.lineage_graph.add_edge(
+                                    upstream_id,
+                                    node_id,
+                                    edge_type="depends_on",
+                                    transformation_type="airflow_task",
+                                    source_file=rel_path,
+                                    line_range=lr,
+                                )
+                                edges += 1
+                        if trace is not None:
+                            trace.append(
                                 {
+                                    "ts": self._utc_now(),
+                                    "agent": "hydrologist",
+                                    "action": "airflow_dag_python",
                                     "file": rel_path,
-                                    "type": op_type,
-                                    "call_path": call_path,
-                                    "args": args[:500],
-                                    "line_range": line_range,
+                                    "method": "static",
+                                    "confidence": 0.7,
+                                    "tasks": created,
+                                    "edges": edges,
                                 }
                             )
-
-                        # File/table-like literals (pandas/pyspark read/write)
-                        if direction in {"read", "write"}:
-                            for lit in [str(x) for x in literals if isinstance(x, str) and x.strip()]:
-                                if direction == "read":
-                                    sources.add(lit)
-                                    src_lr.setdefault(lit, line_range)
-                                else:
-                                    targets.add(lit)
-                                    tgt_lr.setdefault(lit, line_range)
-
-                        # Inline SQL strings inside Python calls (read_sql/execute/spark.sql).
-                        sql_literals = op.get("sql_literals") or []
-                        for sql_text in [str(x) for x in sql_literals if isinstance(x, str) and x.strip()]:
-                            if not self._looks_like_sql(sql_text):
-                                continue
-                            try:
-                                deps = sql_analyzer.extract_dependencies(sql_text, dialect="postgres")
-                            except Exception:
-                                deps = {}
-                            for s in deps.get("sources", []) or []:
-                                sources.add(str(s))
-                                src_lr.setdefault(str(s), line_range)
-                            for t in deps.get("targets", []) or []:
-                                targets.add(str(t))
-                                tgt_lr.setdefault(str(t), line_range)
-
-                    if not sources and not targets:
-                        continue
-
-                    t_node = TransformationNode(
-                        source_datasets=sorted(sources),
-                        target_datasets=sorted(targets),
-                        transformation_type="python",
-                        source_file=rel_path,
-                        line_range=f"{min_line}-{max_line}" if min_line != 10**9 else "1-1",
-                    )
-                    self.kg.add_transformation_node(t_node)
-
-                    for s in t_node.source_datasets:
-                        self._ensure_dataset(s, owner="python")
-                        self.kg.add_consumes_edge(
-                            ConsumesEdge(
-                                transformation=rel_path,
-                                dataset=s,
-                                transformation_type="python",
-                                source_file=rel_path,
-                                line_range=str(src_lr.get(s) or "1-1"),
-                            )
-                        )
-                    for t in t_node.target_datasets:
-                        self._ensure_dataset(t, owner="python")
-                        self.kg.add_produces_edge(
-                            ProducesEdge(
-                                transformation=rel_path,
-                                dataset=t,
-                                transformation_type="python",
-                                source_file=rel_path,
-                                line_range=str(tgt_lr.get(t) or "1-1"),
-                            )
-                        )
-                    if trace is not None:
-                        trace.append(
-                            {
-                                "ts": self._utc_now(),
-                                "agent": "hydrologist",
-                                "action": "python_lineage",
-                                "file": rel_path,
-                                "method": "static",
-                                "confidence": 0.75,
-                                "sources": sorted(sources)[:100],
-                                "targets": sorted(targets)[:100],
-                            }
-                        )
 
                 elif file.endswith(".sql"):
                     try:

@@ -128,7 +128,7 @@ class Orchestrator:
         # Semanticist Phase
         if "semanticist" in phases and config.semanticist.enabled:
             trace.append({"ts": self._utc_now(), "event": "phase_start", "phase": "semanticist"})
-            self.semanticist.run(repo_root, config=config, trace=trace, output_dir=target_out)
+            self.semanticist.run(repo_root, config=config, trace=trace, output_dir=target_out, only_files=changed_files)
             trace.append({"ts": self._utc_now(), "event": "phase_end", "phase": "semanticist"})
             target_out.mkdir(exist_ok=True, parents=True)
             self.kg.serialize_module_graph(target_out / "module_graph.json")
@@ -164,8 +164,38 @@ class Orchestrator:
         if "archivist" in phases:
             trace.append({"ts": self._utc_now(), "event": "phase_start", "phase": "archivist"})
             for od in out_dirs:
+                trace.append(
+                    {
+                        "ts": self._utc_now(),
+                        "agent": "archivist",
+                        "action": "write_codebase_md",
+                        "method": "static",
+                        "confidence": 0.9,
+                        "output": str((Path(od) / "CODEBASE.md").as_posix()),
+                    }
+                )
                 self.archivist.write_codebase_md(repo_root, od)
+                trace.append(
+                    {
+                        "ts": self._utc_now(),
+                        "agent": "archivist",
+                        "action": "write_onboarding_brief",
+                        "method": "static",
+                        "confidence": 0.9,
+                        "output": str((Path(od) / "onboarding_brief.md").as_posix()),
+                    }
+                )
                 self.archivist.write_onboarding_brief(repo_root, od)
+                trace.append(
+                    {
+                        "ts": self._utc_now(),
+                        "agent": "archivist",
+                        "action": "write_trace",
+                        "method": "static",
+                        "confidence": 0.95,
+                        "output": str((Path(od) / "cartography_trace.jsonl").as_posix()),
+                    }
+                )
                 self.archivist.write_trace(od, trace)
             trace.append({"ts": self._utc_now(), "event": "phase_end", "phase": "archivist"})
 

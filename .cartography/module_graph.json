@@ -5,26 +5,34 @@
     "top_velocity_files_30d": [
       {
         "path": "src/cli.py",
-        "touches": 10
+        "touches": 11
       },
       {
         "path": "src/orchestrator.py",
-        "touches": 10
+        "touches": 11
       },
       {
         "path": "src/agents/hydrologist.py",
-        "touches": 7
+        "touches": 8
       },
       {
         "path": "src/agents/surveyor.py",
-        "touches": 7
+        "touches": 8
       },
       {
         "path": "src/analyzers/sql_lineage.py",
-        "touches": 6
+        "touches": 7
       },
       {
         "path": ".gitignore",
+        "touches": 6
+      },
+      {
+        "path": "src/agents/semanticist.py",
+        "touches": 5
+      },
+      {
+        "path": "src/analyzers/tree_sitter_analyzer.py",
         "touches": 5
       },
       {
@@ -32,22 +40,15 @@
         "touches": 4
       },
       {
-        "path": "src/agents/semanticist.py",
-        "touches": 4
-      },
-      {
         "path": "src/graph/knowledge_graph.py",
-        "touches": 4
-      },
-      {
-        "path": "src/analyzers/dag_config_parser.py",
         "touches": 4
       }
     ],
     "llm_usage": {
       "max_total_tokens": 200000,
       "used_tokens": 0,
-      "calls": []
+      "calls": [],
+      "skipped": 0
     },
     "day_one_answers": {
       "error": "LLM unavailable for day-one answers. Start LM Studio server and re-run semanticist."
@@ -64,7 +65,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "cartography_config",
+      "domain_cluster": "default-field",
       "domain_cluster_method": "embedding",
       "purpose_statement": "cartography_config.yaml is a YAML configuration file.",
       "purpose_method": "heuristic",
@@ -90,7 +91,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "models-graph",
+      "domain_cluster": "edge-source_file",
       "domain_cluster_method": "embedding",
       "purpose_statement": "main.py defines functions: main.",
       "purpose_method": "heuristic",
@@ -104,7 +105,7 @@
     {
       "path": "src/cli.py",
       "language": "python",
-      "change_velocity_30d": 10,
+      "change_velocity_30d": 11,
       "is_dead_code_candidate": false,
       "last_modified": "1773430973",
       "public_symbol_count": 1,
@@ -215,7 +216,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/cli.py defines functions: main.",
       "purpose_method": "heuristic",
@@ -229,7 +230,7 @@
     {
       "path": "src/config.py",
       "language": "python",
-      "change_velocity_30d": 1,
+      "change_velocity_30d": 2,
       "is_dead_code_candidate": true,
       "last_modified": "1773430386",
       "public_symbol_count": 6,
@@ -329,7 +330,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "default-field",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/config.py defines classes: CartographyConfig, IncrementalConfig, LLMConfig, NavigatorConfig, SemanticistConfig; functions: load_config.",
       "purpose_method": "heuristic",
@@ -343,9 +344,9 @@
     {
       "path": "src/orchestrator.py",
       "language": "python",
-      "change_velocity_30d": 10,
+      "change_velocity_30d": 11,
       "is_dead_code_candidate": true,
-      "last_modified": "1773431079",
+      "last_modified": "1773432900",
       "public_symbol_count": 2,
       "function_defs": [
         {
@@ -509,13 +510,13 @@
             "datetime",
             "timezone"
           ],
-          "line_range": "187-187"
+          "line_range": "217-217"
         }
       ],
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/orchestrator.py defines classes: Orchestrator; functions: __init__, run_analysis.",
       "purpose_method": "heuristic",
@@ -774,7 +775,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/ui_server.py defines classes: Handler, _JobStore; functions: __init__, create, do_GET, do_POST, get, log_message, score, serve.",
       "purpose_method": "heuristic",
@@ -799,7 +800,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "edge-source_file",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/__init__.py is a Python module.",
       "purpose_method": "heuristic",
@@ -811,7 +812,7 @@
     {
       "path": "src/agents/archivist.py",
       "language": "python",
-      "change_velocity_30d": 2,
+      "change_velocity_30d": 3,
       "is_dead_code_candidate": true,
       "last_modified": "1773431043",
       "public_symbol_count": 4,
@@ -943,7 +944,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/agents/archivist.py defines classes: Archivist; functions: __init__, write_codebase_md, write_onboarding_brief, write_trace.",
       "purpose_method": "heuristic",
@@ -957,9 +958,9 @@
     {
       "path": "src/agents/hydrologist.py",
       "language": "python",
-      "change_velocity_30d": 7,
+      "change_velocity_30d": 8,
       "is_dead_code_candidate": true,
-      "last_modified": "1773431358",
+      "last_modified": "1773432664",
       "public_symbol_count": 5,
       "function_defs": [
         {
@@ -1102,7 +1103,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/agents/hydrologist.py defines classes: Hydrologist; functions: __init__, analyze, blast_radius, find_sinks, find_sources.",
       "purpose_method": "heuristic",
@@ -1116,9 +1117,9 @@
     {
       "path": "src/agents/navigator.py",
       "language": "python",
-      "change_velocity_30d": 2,
+      "change_velocity_30d": 3,
       "is_dead_code_candidate": true,
-      "last_modified": "1773430967",
+      "last_modified": "1773432882",
       "public_symbol_count": 15,
       "function_defs": [
         {
@@ -1354,7 +1355,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/agents/navigator.py defines classes: Citation, Navigator, ToolResult, TracePath, _NavState; functions: __init__, ask, blast_radius, blast_radius_tool, explain_module, find_implementation, list_sinks, list_sources.",
       "purpose_method": "heuristic",
@@ -1368,10 +1369,10 @@
     {
       "path": "src/agents/semanticist.py",
       "language": "python",
-      "change_velocity_30d": 4,
+      "change_velocity_30d": 5,
       "is_dead_code_candidate": true,
-      "last_modified": "1773430898",
-      "public_symbol_count": 13,
+      "last_modified": "1773432846",
+      "public_symbol_count": 15,
       "function_defs": [
         {
           "name": "__init__",
@@ -1401,6 +1402,20 @@
           ]
         },
         {
+          "name": "estimate_total_tokens",
+          "signature": "(self, *, prompt: str, max_response_tokens: int)",
+          "decorators": [
+            "@dataclass"
+          ]
+        },
+        {
+          "name": "can_call",
+          "signature": "(self, *, prompt: str, max_response_tokens: int)",
+          "decorators": [
+            "@dataclass"
+          ]
+        },
+        {
           "name": "spend",
           "signature": "(self, *, kind: str, model: str, prompt: str, response: str)",
           "decorators": [
@@ -1414,17 +1429,17 @@
         },
         {
           "name": "annotate_modules",
-          "signature": "(\n        self,\n        repo_root: Path,\n        config: CartographyConfig | None = None,\n        trace: list[dict] | None = None,\n        output_dir: Path | None = None,\n    )",
+          "signature": "(\n        self,\n        repo_root: Path,\n        config: CartographyConfig | None = None,\n        trace: list[dict] | None = None,\n        output_dir: Path | None = None,\n        only_files: set[str] | None = None,\n        budget: LLMBudget | None = None,\n    )",
           "decorators": []
         },
         {
           "name": "answer_day_one_questions",
-          "signature": "(self, repo_root: Path, config: CartographyConfig | None = None, trace: list[dict] | None = None)",
+          "signature": "(\n        self,\n        repo_root: Path,\n        config: CartographyConfig | None = None,\n        trace: list[dict] | None = None,\n        budget: LLMBudget | None = None,\n    )",
           "decorators": []
         },
         {
           "name": "run",
-          "signature": "(\n        self,\n        repo_root: Path,\n        config: CartographyConfig | None = None,\n        trace: list[dict] | None = None,\n        output_dir: Path | None = None,\n    )",
+          "signature": "(\n        self,\n        repo_root: Path,\n        config: CartographyConfig | None = None,\n        trace: list[dict] | None = None,\n        output_dir: Path | None = None,\n        only_files: set[str] | None = None,\n    )",
           "decorators": []
         }
       ],
@@ -1617,29 +1632,29 @@
           "names": [
             "Hydrologist"
           ],
-          "line_range": "546-546"
+          "line_range": "652-652"
         },
         {
           "kind": "import",
           "module": "json",
           "level": 0,
           "names": [],
-          "line_range": "582-582"
+          "line_range": "696-696"
         },
         {
           "kind": "import",
           "module": "json",
           "level": 0,
           "names": [],
-          "line_range": "457-457"
+          "line_range": "556-556"
         }
       ],
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
-      "purpose_statement": "src/agents/semanticist.py defines classes: Citation, ContextWindowBudget, LLMBudget, PurposeResult, Semanticist; functions: __init__, annotate_modules, answer_day_one_questions, choose_model, remaining, render, run, spend.",
+      "purpose_statement": "src/agents/semanticist.py defines classes: Citation, ContextWindowBudget, LLMBudget, PurposeResult, Semanticist; functions: __init__, annotate_modules, answer_day_one_questions, can_call, choose_model, estimate_total_tokens, remaining, render.",
       "purpose_method": "heuristic",
       "doc_drift_score": 0.6,
       "doc_drift_flags": [
@@ -1651,7 +1666,7 @@
     {
       "path": "src/agents/surveyor.py",
       "language": "python",
-      "change_velocity_30d": 7,
+      "change_velocity_30d": 8,
       "is_dead_code_candidate": true,
       "last_modified": "1773431353",
       "public_symbol_count": 3,
@@ -1778,7 +1793,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/agents/surveyor.py defines classes: Surveyor; functions: __init__, analyze, resolve_module.",
       "purpose_method": "heuristic",
@@ -1803,7 +1818,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "__init__-package",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/agents/__init__.py is a Python module.",
       "purpose_method": "heuristic",
@@ -1817,8 +1832,8 @@
       "language": "python",
       "change_velocity_30d": 4,
       "is_dead_code_candidate": true,
-      "last_modified": "1773260157",
-      "public_symbol_count": 3,
+      "last_modified": "1773432563",
+      "public_symbol_count": 4,
       "function_defs": [
         {
           "name": "parse_dbt_yaml",
@@ -1827,6 +1842,11 @@
         },
         {
           "name": "parse_airflow_yaml",
+          "signature": "(self, file_path: str)",
+          "decorators": []
+        },
+        {
+          "name": "parse_airflow_py",
           "signature": "(self, file_path: str)",
           "decorators": []
         }
@@ -1838,7 +1858,12 @@
           "decorators": []
         }
       ],
-      "data_ops": [],
+      "data_ops": [
+        {
+          "type": "p.read_text",
+          "args": "(encoding=\"utf-8\", errors=\"ignore\")"
+        }
+      ],
       "import_modules": [
         {
           "kind": "import",
@@ -1857,14 +1882,30 @@
             "List"
           ],
           "line_range": "2-2"
+        },
+        {
+          "kind": "import",
+          "module": "ast",
+          "level": 0,
+          "names": [],
+          "line_range": "3-3"
+        },
+        {
+          "kind": "from",
+          "module": "pathlib",
+          "level": 0,
+          "names": [
+            "Path"
+          ],
+          "line_range": "4-4"
         }
       ],
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
-      "purpose_statement": "src/analyzers/dag_config_parser.py defines classes: DAGConfigParser; functions: parse_airflow_yaml, parse_dbt_yaml.",
+      "purpose_statement": "src/analyzers/dag_config_parser.py defines classes: DAGConfigParser; functions: parse_airflow_py, parse_airflow_yaml, parse_dbt_yaml.",
       "purpose_method": "heuristic",
       "doc_drift_score": 0.6,
       "doc_drift_flags": [
@@ -1876,7 +1917,7 @@
     {
       "path": "src/analyzers/sql_lineage.py",
       "language": "python",
-      "change_velocity_30d": 6,
+      "change_velocity_30d": 7,
       "is_dead_code_candidate": true,
       "last_modified": "1773430487",
       "public_symbol_count": 3,
@@ -1962,7 +2003,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/analyzers/sql_lineage.py defines classes: SQLLineageAnalyzer; functions: __init__, consume_parse_failures, extract_dependencies.",
       "purpose_method": "heuristic",
@@ -1976,9 +2017,9 @@
     {
       "path": "src/analyzers/tree_sitter_analyzer.py",
       "language": "python",
-      "change_velocity_30d": 4,
+      "change_velocity_30d": 5,
       "is_dead_code_candidate": true,
-      "last_modified": "1773431056",
+      "last_modified": "1773432606",
       "public_symbol_count": 9,
       "function_defs": [
         {
@@ -2157,13 +2198,13 @@
           "module": "yaml",
           "level": 0,
           "names": [],
-          "line_range": "436-436"
+          "line_range": "465-465"
         }
       ],
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/analyzers/tree_sitter_analyzer.py defines classes: LanguageRouter, TreeSitterAnalyzer; functions: __init__, analyze_python_module, get_language, parse_python, parse_sql, parse_yaml, text, traverse.",
       "purpose_method": "heuristic",
@@ -2188,7 +2229,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "__init__-package",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/analyzers/__init__.py is a Python module.",
       "purpose_method": "heuristic",
@@ -2370,7 +2411,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "models-graph",
+      "domain_cluster": "edge-source_file",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/graph/knowledge_graph.py defines classes: KnowledgeGraph; functions: __init__, add_calls_edge, add_configures_edge, add_consumes_edge, add_dataset_node, add_import_edge, add_module_node, add_produces_edge.",
       "purpose_method": "heuristic",
@@ -2384,10 +2425,10 @@
     {
       "path": "src/graph/semantic_index.py",
       "language": "python",
-      "change_velocity_30d": 0,
+      "change_velocity_30d": 1,
       "is_dead_code_candidate": true,
-      "last_modified": "1773431773",
-      "public_symbol_count": 9,
+      "last_modified": "1773432686",
+      "public_symbol_count": 11,
       "function_defs": [
         {
           "name": "embed_texts",
@@ -2414,6 +2455,16 @@
         {
           "name": "to_json",
           "signature": "(self)",
+          "decorators": []
+        },
+        {
+          "name": "as_map",
+          "signature": "(self)",
+          "decorators": []
+        },
+        {
+          "name": "updated",
+          "signature": "(\n        self,\n        *,\n        module_texts: List[Tuple[str, str]],\n        all_module_paths: Optional[Iterable[str]] = None,\n        client: Optional[OpenAICompatClient] = None,\n    )",
           "decorators": []
         },
         {
@@ -2452,14 +2503,12 @@
       ],
       "data_ops": [
         {
-          "type": "pandas_to_json",
-          "direction": "write",
-          "call_path": "self.to_json",
-          "args": "self.to_json()",
-          "literals": [],
-          "sql_literals": [],
-          "line_range": "135-135",
-          "unresolved": true
+          "type": "p.write_text",
+          "args": "(json.dumps(self.to_json(), indent=2), encoding=\"utf-8\")"
+        },
+        {
+          "type": "p.read_text",
+          "args": "(encoding=\"utf-8\")"
         }
       ],
       "import_modules": [
@@ -2538,9 +2587,9 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
-      "purpose_statement": "src/graph/semantic_index.py defines classes: SemanticIndex, SemanticIndexEntry; functions: __init__, build, embed_texts, from_json, load, save, search, to_json.",
+      "purpose_statement": "src/graph/semantic_index.py defines classes: SemanticIndex, SemanticIndexEntry; functions: __init__, as_map, build, embed_texts, from_json, load, save, search.",
       "purpose_method": "heuristic",
       "doc_drift_score": 0.6,
       "doc_drift_flags": [
@@ -2563,7 +2612,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "__init__-package",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/graph/__init__.py is a Python module.",
       "purpose_method": "heuristic",
@@ -2575,7 +2624,7 @@
     {
       "path": "src/llm/openai_compat.py",
       "language": "python",
-      "change_velocity_30d": 2,
+      "change_velocity_30d": 3,
       "is_dead_code_candidate": false,
       "last_modified": "1773430386",
       "public_symbol_count": 6,
@@ -2715,7 +2764,7 @@
       "pagerank": 0.0689013046749361,
       "import_in_degree": 1,
       "import_out_degree": 0,
-      "domain_cluster": "models-graph",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/llm/openai_compat.py defines classes: ChatMessage, OpenAICompatClient; functions: __init__, chat_completions, embeddings, get_models, is_available.",
       "purpose_method": "heuristic",
@@ -2751,7 +2800,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 1,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "__init__-package",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/llm/__init__.py is a Python module.",
       "purpose_method": "heuristic",
@@ -2830,7 +2879,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "models-graph",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/models/edges.py defines classes: CallsEdge, ConfiguresEdge, ConsumesEdge, ImportsEdge, ProducesEdge.",
       "purpose_method": "heuristic",
@@ -2911,7 +2960,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/models/graph.py defines classes: GraphEdge, GraphNode, NodeLinkGraph; functions: from_networkx.",
       "purpose_method": "heuristic",
@@ -2989,7 +3038,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "models-graph",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/models/nodes.py defines classes: DatasetNode, FunctionNode, ModuleNode, TransformationNode.",
       "purpose_method": "heuristic",
@@ -3014,7 +3063,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "agents-analyzers",
+      "domain_cluster": "__init__-package",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/models/__init__.py is a Python module.",
       "purpose_method": "heuristic",
