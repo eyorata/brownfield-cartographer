@@ -10,7 +10,12 @@ from pydantic import BaseModel, Field
 class LLMConfig(BaseModel):
     base_url: str = Field(default="http://localhost:1234/v1")
     api_key: str = Field(default="lm-studio")
+    # Backwards-compatible default model name (used by older configs).
     model: str = Field(default="local-model")
+    # Cost-conscious selection: cheap model for bulk, expensive model for synthesis.
+    cheap_model: str = Field(default="local-model")
+    expensive_model: str = Field(default="local-model")
+    max_total_tokens: int = Field(default=200_000, ge=1, le=10_000_000)
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     max_tokens: int = Field(default=900, ge=1, le=8192)
     timeout_s: int = Field(default=90, ge=1, le=600)
@@ -22,6 +27,10 @@ class SemanticistConfig(BaseModel):
     doc_drift_detection: bool = True
     day_one_answers: bool = True
     context_budget_tokens: int = Field(default=6000, ge=256, le=200000)
+    # Build and persist a semantic index for Navigator find_implementation().
+    semantic_index: bool = True
+    # Max modules to embed for the index/clustering.
+    max_semantic_index_modules: int = Field(default=2500, ge=10, le=50_000)
 
 
 class NavigatorConfig(BaseModel):
@@ -67,4 +76,3 @@ def load_config(path: str | Path | None) -> CartographyConfig:
         return CartographyConfig.model_validate(raw)
     except Exception:
         return CartographyConfig()
-

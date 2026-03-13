@@ -89,3 +89,52 @@ class OpenAICompatClient:
                     continue
                 raise
         raise RuntimeError(str(last_err) if last_err else "LLM request failed")
+
+    def embeddings(
+        self,
+        *,
+        model: str,
+        inputs: List[str],
+        retries: int = 2,
+    ) -> List[List[float]]:
+        """
+        Best-effort OpenAI-compatible embeddings call.
+
+        Works with servers that expose POST /embeddings (including many local OpenAI-compatible APIs).
+        Returns one embedding per input string.
+        """
+        url = f"{self.base_url}/embeddings"
+        payload: Dict[str, Any] = {
+            "model": model,
+            "input": inputs,
+        }
+        data = json.dumps(payload).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+        }
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        last_err: Exception | None = None
+        for attempt in range(retries + 1):
+            try:
+                req = Request(url=url, data=data, headers=headers, method="POST")
+                with urlopen(req, timeout=self.timeout_s) as resp:
+                    body = resp.read().decode("utf-8", errors="ignore")
+                out = json.loads(body)
+                data_items = out.get("data") or []
+                embeddings: List[List[float]] = []
+                for item in data_items:
+                    emb = item.get("embedding")
+                    if isinstance(emb, list) and emb:
+                        embeddings.append([float(x) for x in emb])
+                if len(embeddings) != len(inputs):
+                    raise ValueError("Embeddings response length mismatch")
+                return embeddings
+            except (HTTPError, URLError, TimeoutError, KeyError, ValueError) as e:
+                last_err = e
+                if attempt < retries:
+                    time.sleep(0.4 * (attempt + 1))
+                    continue
+                raise
+        raise RuntimeError(str(last_err) if last_err else "Embeddings request failed")

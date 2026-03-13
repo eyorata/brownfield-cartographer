@@ -1,8 +1,35 @@
-{"ts": "2026-03-12T17:48:50Z", "event": "start", "repo_root": "C:\\Users\\user\\Documents\\brownfield-cartographer\\brownfield-cartographer\\_targets\\dbt-core", "phases": ["surveyor", "hydrologist", "semanticist", "archivist"]}
-{"ts": "2026-03-12T17:48:50Z", "event": "phase_start", "phase": "surveyor"}
-{"ts": "2026-03-12T17:49:16Z", "event": "phase_end", "phase": "surveyor"}
-{"ts": "2026-03-12T17:49:16Z", "event": "phase_start", "phase": "hydrologist"}
-{"ts": "2026-03-12T17:49:28Z", "event": "phase_end", "phase": "hydrologist"}
-{"ts": "2026-03-12T17:49:28Z", "event": "phase_start", "phase": "semanticist"}
-{"ts": "2026-03-12T17:49:29Z", "event": "phase_end", "phase": "semanticist"}
-{"ts": "2026-03-12T17:49:29Z", "event": "phase_start", "phase": "archivist"}
+{"ts": "2026-03-13T19:56:29Z", "event": "start", "repo_root": "C:\\Users\\user\\Documents\\brownfield-cartographer\\brownfield-cartographer", "phases": ["surveyor", "hydrologist", "semanticist", "archivist"]}
+{"ts": "2026-03-13T19:56:29Z", "event": "phase_start", "phase": "surveyor"}
+{"ts": "2026-03-13T19:56:29Z", "agent": "surveyor", "action": "python_structure", "file": "main.py", "method": "static", "confidence": 0.8, "functions": 1, "classes": 0, "imports": 0}
+{"ts": "2026-03-13T19:56:29Z", "agent": "surveyor", "action": "python_structure", "file": "src/cli.py", "method": "static", "confidence": 0.8, "functions": 1, "classes": 0, "imports": 11}
+{"ts": "2026-03-13T19:56:29Z", "agent": "surveyor", "action": "python_structure", "file": "src/config.py", "method": "static", "confidence": 0.8, "functions": 1, "classes": 5, "imports": 6}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/orchestrator.py", "method": "static", "confidence": 0.8, "functions": 2, "classes": 1, "imports": 13}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/ui_server.py", "method": "static", "confidence": 0.8, "functions": 9, "classes": 2, "imports": 14}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/__init__.py", "method": "static", "confidence": 0.8, "functions": 0, "classes": 0, "imports": 0}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/agents/archivist.py", "method": "static", "confidence": 0.8, "functions": 4, "classes": 1, "imports": 9}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/agents/hydrologist.py", "method": "static", "confidence": 0.8, "functions": 5, "classes": 1, "imports": 11}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/agents/navigator.py", "method": "static", "confidence": 0.8, "functions": 12, "classes": 5, "imports": 13}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/agents/semanticist.py", "method": "static", "confidence": 0.8, "functions": 9, "classes": 5, "imports": 15}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/agents/surveyor.py", "method": "static", "confidence": 0.8, "functions": 3, "classes": 1, "imports": 11}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/agents/__init__.py", "method": "static", "confidence": 0.8, "functions": 0, "classes": 0, "imports": 0}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/analyzers/dag_config_parser.py", "method": "static", "confidence": 0.8, "functions": 2, "classes": 1, "imports": 2}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/analyzers/sql_lineage.py", "method": "static", "confidence": 0.8, "functions": 3, "classes": 1, "imports": 6}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/analyzers/tree_sitter_analyzer.py", "method": "static", "confidence": 0.8, "functions": 8, "classes": 2, "imports": 10}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/analyzers/__init__.py", "method": "static", "confidence": 0.8, "functions": 0, "classes": 0, "imports": 0}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/graph/knowledge_graph.py", "method": "static", "confidence": 0.8, "functions": 15, "classes": 1, "imports": 8}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/graph/semantic_index.py", "method": "static", "confidence": 0.8, "functions": 8, "classes": 2, "imports": 8}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/graph/__init__.py", "method": "static", "confidence": 0.8, "functions": 0, "classes": 0, "imports": 0}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/llm/openai_compat.py", "method": "static", "confidence": 0.8, "functions": 5, "classes": 2, "imports": 7}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/llm/__init__.py", "method": "static", "confidence": 0.8, "functions": 0, "classes": 0, "imports": 1}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/models/edges.py", "method": "static", "confidence": 0.8, "functions": 0, "classes": 5, "imports": 3}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/models/graph.py", "method": "static", "confidence": 0.8, "functions": 1, "classes": 3, "imports": 3}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/models/nodes.py", "method": "static", "confidence": 0.8, "functions": 0, "classes": 4, "imports": 3}
+{"ts": "2026-03-13T19:56:30Z", "agent": "surveyor", "action": "python_structure", "file": "src/models/__init__.py", "method": "static", "confidence": 0.8, "functions": 0, "classes": 0, "imports": 0}
+{"ts": "2026-03-13T19:56:30Z", "event": "phase_end", "phase": "surveyor"}
+{"ts": "2026-03-13T19:56:30Z", "event": "phase_start", "phase": "hydrologist"}
+{"ts": "2026-03-13T19:56:30Z", "agent": "hydrologist", "action": "unresolved_python_ops", "method": "static", "confidence": 0.35, "count": 1, "samples": [{"file": "src/graph/semantic_index.py", "type": "pandas_to_json", "call_path": "self.to_json", "args": "self.to_json()", "line_range": "135-135"}]}
+{"ts": "2026-03-13T19:56:30Z", "event": "phase_end", "phase": "hydrologist"}
+{"ts": "2026-03-13T19:56:30Z", "event": "phase_start", "phase": "semanticist"}
+{"ts": "2026-03-13T19:56:42Z", "agent": "semanticist", "action": "semantic_index", "method": "embedding", "confidence": 0.65, "entries": 26, "output": "C:/Users/user/Documents/brownfield-cartographer/brownfield-cartographer/.cartography/semantic_index.json"}
+{"ts": "2026-03-13T20:00:02Z", "event": "phase_end", "phase": "semanticist"}
+{"ts": "2026-03-13T20:00:02Z", "event": "phase_start", "phase": "archivist"}

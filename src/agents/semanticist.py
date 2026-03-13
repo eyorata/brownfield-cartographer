@@ -5,6 +5,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple, Optional
+import math
+from datetime import datetime, timezone
 
 _SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
@@ -13,6 +15,7 @@ if str(_SRC_DIR) not in sys.path:
 from config import CartographyConfig
 from graph.knowledge_graph import KnowledgeGraph
 from llm import ChatMessage, OpenAICompatClient
+from graph.semantic_index import SemanticIndex, embed_texts
 
 
 @dataclass(frozen=True)
@@ -74,6 +77,32 @@ class ContextWindowBudget:
             out.append("")
         return "\n".join(out).strip() + "\n"
 
+@dataclass
+class LLMBudget:
+    max_total_tokens: int
+    used_tokens: int = 0
+    calls: List[Dict[str, Any]] = None
+
+    def __post_init__(self):
+        if self.calls is None:
+            self.calls = []
+
+    @staticmethod
+    def _approx_tokens(text: str) -> int:
+        return max(1, int(len(text or "") / 4))
+
+    def choose_model(self, *, config: CartographyConfig, task: str) -> str:
+        cheap = config.llm.cheap_model or config.llm.model
+        expensive = config.llm.expensive_model or config.llm.model
+        if task in {"day_one", "drift"}:
+            return expensive
+        return cheap
+
+    def spend(self, *, kind: str, model: str, prompt: str, response: str) -> None:
+        t = self._approx_tokens(prompt) + self._approx_tokens(response)
+        self.used_tokens += int(t)
+        self.calls.append({"kind": kind, "model": model, "tokens": int(t)})
+
 
 class Semanticist:
     """
@@ -85,6 +114,10 @@ class Semanticist:
 
     def __init__(self, kg: KnowledgeGraph):
         self.kg = kg
+
+    @staticmethod
+    def _utc_now() -> str:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     @staticmethod
     def _domain_cluster_from_path(path: str) -> str:
@@ -182,7 +215,6 @@ class Semanticist:
     @staticmethod
     def _purpose_from_signals(path: str, node_attrs: Dict[str, Any], file_text: str) -> str:
         language = str(node_attrs.get("language") or "")
-        doc = Semanticist._read_first_docstring(file_text)
 
         if language == "python":
             func_defs = node_attrs.get("function_defs") or []
@@ -194,8 +226,6 @@ class Semanticist:
                 bits.append("classes: " + ", ".join(sorted(set(cls_names))[:6]))
             if fn_names:
                 bits.append("functions: " + ", ".join(sorted(set(fn_names))[:8]))
-            if doc:
-                bits.append("doc: " + doc)
             if bits:
                 return f"{path} defines " + "; ".join(bits) + "."
             return f"{path} is a Python module."
@@ -210,11 +240,155 @@ class Semanticist:
 
         return f"{path} is a source file."
 
-    def annotate_modules(self, repo_root: Path, config: CartographyConfig | None = None) -> None:
+    def annotate_modules(
+        self,
+        repo_root: Path,
+        config: CartographyConfig | None = None,
+        trace: list[dict] | None = None,
+        output_dir: Path | None = None,
+    ) -> None:
         """
         Adds/updates purpose_statement + domain_cluster on module graph nodes.
         """
         config = config or CartographyConfig()
+        output_dir = output_dir or (repo_root / ".cartography")
+
+        llm_client = OpenAICompatClient(
+            base_url=config.llm.base_url,
+            api_key=config.llm.api_key,
+            timeout_s=config.llm.timeout_s,
+        )
+        if not llm_client.is_available(timeout_s=3):
+            llm_client = None
+
+        budget = LLMBudget(max_total_tokens=int(config.llm.max_total_tokens))
+        self.kg.module_graph.graph["llm_usage"] = {"max_total_tokens": budget.max_total_tokens, "used_tokens": 0, "calls": []}
+
+        # ---- Build semantic index and embedding-based domain clusters ----
+        module_texts: List[Tuple[str, str]] = []
+        for node_id, attrs in self.kg.module_graph.nodes(data=True):
+            rel = str(node_id)
+            fp = (repo_root / rel).resolve()
+            snippet = ""
+            try:
+                if fp.exists():
+                    snippet = "\n".join(fp.read_text(encoding="utf-8", errors="ignore").splitlines()[:120])
+            except Exception:
+                snippet = ""
+            signals = self._extract_signal_summary(dict(attrs))
+            module_texts.append((rel, f"{rel}\n{signals}\n{snippet}"))
+
+        module_texts = module_texts[: int(config.semanticist.max_semantic_index_modules)]
+
+        idx: SemanticIndex | None = None
+        if config.semanticist.semantic_index:
+            try:
+                idx = SemanticIndex.build(
+                    module_texts=module_texts,
+                    client=llm_client,
+                    model=config.llm.cheap_model or config.llm.model,
+                )
+                idx.save(output_dir / "semantic_index.json")
+                if trace is not None:
+                    trace.append(
+                        {
+                            "ts": self._utc_now(),
+                            "agent": "semanticist",
+                            "action": "semantic_index",
+                            "method": "embedding" if llm_client is not None else "hash_embedding",
+                            "confidence": 0.65,
+                            "entries": len(idx.entries),
+                            "output": str((output_dir / "semantic_index.json").as_posix()),
+                        }
+                    )
+            except Exception:
+                idx = None
+
+        def _kmeans_cosine(vectors: List[List[float]], k: int, max_iter: int = 15) -> List[int]:
+            n = len(vectors)
+            if n == 0:
+                return []
+            k = max(1, min(int(k), n))
+            centroids: List[List[float]] = []
+            for i in range(k):
+                idx0 = int(round(i * (n - 1) / max(1, (k - 1))))
+                centroids.append(list(vectors[idx0]))
+
+            def _cos(a: List[float], b: List[float]) -> float:
+                dot = 0.0
+                na = 0.0
+                nb = 0.0
+                for x, y in zip(a, b):
+                    dot += float(x) * float(y)
+                    na += float(x) * float(x)
+                    nb += float(y) * float(y)
+                if na <= 0.0 or nb <= 0.0:
+                    return 0.0
+                return dot / (math.sqrt(na) * math.sqrt(nb))
+
+            assign = [0] * n
+            for _ in range(max_iter):
+                changed = False
+                for i, v in enumerate(vectors):
+                    best = 0
+                    best_s = -1.0
+                    for ci, c in enumerate(centroids):
+                        s = _cos(v, c)
+                        if s > best_s:
+                            best_s = s
+                            best = ci
+                    if assign[i] != best:
+                        assign[i] = best
+                        changed = True
+                if not changed:
+                    break
+
+                dim = len(vectors[0]) if vectors else 0
+                sums = [[0.0] * dim for _ in range(k)]
+                counts = [0] * k
+                for a, v in zip(assign, vectors, strict=False):
+                    counts[a] += 1
+                    for j in range(dim):
+                        sums[a][j] += float(v[j])
+                for ci in range(k):
+                    if counts[ci] == 0:
+                        continue
+                    c = [x / counts[ci] for x in sums[ci]]
+                    norm = math.sqrt(sum(x * x for x in c)) or 1.0
+                    centroids[ci] = [x / norm for x in c]
+            return assign
+
+        def _label_clusters(paths: List[str], assignments: List[int]) -> Dict[int, str]:
+            stop = {"src", "test", "tests", "py", "sql", "yaml", "yml", "__init__", "main", "cli"}
+            counts: Dict[int, Dict[str, int]] = {}
+            for p, a in zip(paths, assignments, strict=False):
+                toks = re.findall(r"[A-Za-z_][A-Za-z0-9_]{1,40}", p.replace("\\", "/").lower())
+                for t in toks:
+                    if t in stop or t.isdigit():
+                        continue
+                    counts.setdefault(int(a), {})[t] = counts.setdefault(int(a), {}).get(t, 0) + 1
+            labels: Dict[int, str] = {}
+            for a, c in counts.items():
+                top = sorted(c.items(), key=lambda kv: kv[1], reverse=True)[:3]
+                name = "-".join([t for t, _ in top[:2]]) if top else f"cluster-{a}"
+                labels[a] = name or f"cluster-{a}"
+            return labels
+
+        # Apply embedding-based domain clusters to all nodes (fallback to path heuristic if clustering fails).
+        try:
+            paths = [p for p, _ in module_texts]
+            vectors = [e.embedding for e in idx.entries] if idx is not None else embed_texts([t for _, t in module_texts])
+            n = len(vectors)
+            if n >= 8:
+                k = min(12, max(2, int(round(math.sqrt(n / 2)))))
+                assignments = _kmeans_cosine(vectors, k=k)
+                labels = _label_clusters(paths, assignments)
+                for rel, a in zip(paths, assignments, strict=False):
+                    if rel in self.kg.module_graph.nodes:
+                        self.kg.module_graph.nodes[rel]["domain_cluster"] = labels.get(int(a), f"cluster-{a}")
+                        self.kg.module_graph.nodes[rel]["domain_cluster_method"] = "embedding"
+        except Exception:
+            pass
 
         # Choose a subset of modules for LLM upgrades (purpose/drift), biased by PageRank + velocity.
         ranked = []
@@ -224,16 +398,6 @@ class Semanticist:
             ranked.append((pr * 1_000_000.0 + vel, str(node_id)))
         ranked.sort(reverse=True)
         llm_targets = {p for _, p in ranked[: max(1, int(config.semanticist.max_llm_modules))]}
-
-        llm_client: OpenAICompatClient | None = None
-        if config.semanticist.enabled:
-            llm_client = OpenAICompatClient(
-                base_url=config.llm.base_url,
-                api_key=config.llm.api_key,
-                timeout_s=config.llm.timeout_s,
-            )
-            if not llm_client.is_available(timeout_s=3):
-                llm_client = None
 
         for node_id, attrs in list(self.kg.module_graph.nodes(data=True)):
             try:
@@ -245,41 +409,49 @@ class Semanticist:
                 except Exception:
                     text = ""
 
-                domain = self._domain_cluster_from_path(rel)
+                # Fallback domain cluster if embedding clustering didn't run.
+                if not attrs.get("domain_cluster"):
+                    attrs["domain_cluster"] = self._domain_cluster_from_path(rel)
+                    attrs["domain_cluster_method"] = "path"
+
                 purpose = self._purpose_from_signals(rel, attrs, text)
-                attrs["domain_cluster"] = domain
                 attrs["purpose_statement"] = purpose
+                attrs["purpose_method"] = "heuristic"
 
                 if config.semanticist.doc_drift_detection and attrs.get("language") == "python":
                     drift_score, drift_flags = self._doc_drift_heuristic(text, attrs)
                     attrs["doc_drift_score"] = float(drift_score)
                     attrs["doc_drift_flags"] = drift_flags
+                    attrs["doc_drift_method"] = "heuristic"
 
-                # LLM upgrades for a limited subset (purpose statement refinement + drift explanation).
+                # LLM upgrades for a limited subset (purpose statement refinement + structured drift).
                 if llm_client is not None and rel in llm_targets and file_path.exists():
-                    # Provide signals + a small excerpt. The model should NOT just restate the docstring.
                     lr, snippet = self._read_lines_with_numbers(file_path, 1, 120)
                     signals = self._extract_signal_summary(attrs)
+                    doc = self._read_first_docstring(text)
                     sys_msg = (
-                        "You are a codebase cartographer. Write concise purpose statements grounded in code structure. "
-                        "Avoid docstring regurgitation. Output strict JSON only."
+                        "You are a codebase cartographer.\n"
+                        "Generate a 1-sentence purpose statement grounded ONLY in implementation details.\n"
+                        "Ignore docstrings when generating purpose.\n"
+                        "Then compare your purpose statement to the docstring and report documentation drift.\n"
+                        "Output strict JSON only with keys:\n"
+                        "- purpose_statement: string\n"
+                        "- doc_drift: {severity:'none'|'low'|'medium'|'high', contradictions:[string], flags:[string]}\n"
                     )
                     user_msg = (
                         f"FILE: {rel}\n"
                         f"LANG: {attrs.get('language')}\n"
                         f"SIGNALS: {signals}\n"
-                        f"EXCERPT ({lr}):\n{snippet}\n\n"
-                        "Return JSON with keys:\n"
-                        "- purpose_statement: one sentence\n"
-                        "- domain_cluster: short cluster label derived from path\n"
-                        "- doc_drift_flags: array of short strings (optional)\n"
+                        f"DOCSTRING (for drift comparison only): {doc}\n\n"
+                        f"EXCERPT ({lr}):\n{snippet}\n"
                     )
                     try:
+                        model = budget.choose_model(config=config, task="drift")
                         out = llm_client.chat_completions(
-                            model=config.llm.model,
+                            model=model,
                             messages=[ChatMessage(role="system", content=sys_msg), ChatMessage(role="user", content=user_msg)],
                             temperature=config.llm.temperature,
-                            max_tokens=min(600, int(config.llm.max_tokens)),
+                            max_tokens=min(700, int(config.llm.max_tokens)),
                             response_format={"type": "json_object"},
                         )
                         import json as _json
@@ -288,19 +460,46 @@ class Semanticist:
                         ps = str(parsed.get("purpose_statement") or "").strip()
                         if ps:
                             attrs["purpose_statement"] = ps
-                        dc = str(parsed.get("domain_cluster") or "").strip()
-                        if dc:
-                            attrs["domain_cluster"] = dc
-                        if isinstance(parsed.get("doc_drift_flags"), list):
-                            attrs["doc_drift_flags"] = [str(x) for x in parsed.get("doc_drift_flags") if str(x).strip()]
+                            attrs["purpose_method"] = "llm"
+
+                        drift = parsed.get("doc_drift")
+                        if isinstance(drift, dict):
+                            sev = str(drift.get("severity") or "").strip()
+                            if sev:
+                                attrs["doc_drift_severity"] = sev
+                                attrs["doc_drift_method"] = "llm"
+                            flags = drift.get("flags")
+                            if isinstance(flags, list):
+                                attrs["doc_drift_flags"] = [str(x) for x in flags if str(x).strip()]
+                            contr = drift.get("contradictions")
+                            if isinstance(contr, list):
+                                attrs["doc_drift_contradictions"] = [str(x) for x in contr if str(x).strip()][:10]
+
+                        budget.spend(kind="module_purpose_drift", model=model, prompt=sys_msg + "\n" + user_msg, response=out)
+                        self.kg.module_graph.graph["llm_usage"] = {
+                            "max_total_tokens": budget.max_total_tokens,
+                            "used_tokens": budget.used_tokens,
+                            "calls": budget.calls[-250:],
+                        }
+                        if trace is not None:
+                            trace.append(
+                                {
+                                    "ts": self._utc_now(),
+                                    "agent": "semanticist",
+                                    "action": "annotate_module_llm",
+                                    "file": rel,
+                                    "method": "llm",
+                                    "confidence": 0.55,
+                                    "model": model,
+                                    "citations": [f"{rel}:{lr}"],
+                                }
+                            )
                     except Exception:
-                        # Keep deterministic purpose if LLM fails/unavailable.
                         pass
             except Exception:
-                # Semanticist should not fail the pipeline.
                 continue
 
-    def answer_day_one_questions(self, repo_root: Path, config: CartographyConfig | None = None) -> None:
+    def answer_day_one_questions(self, repo_root: Path, config: CartographyConfig | None = None, trace: list[dict] | None = None) -> None:
         """
         Populate repo-level Day-One answers into graph metadata:
         self.kg.module_graph.graph["day_one_answers"] = {...}
@@ -371,8 +570,10 @@ class Semanticist:
         )
 
         try:
+            budget2 = LLMBudget(max_total_tokens=int(config.llm.max_total_tokens))
+            model = budget2.choose_model(config=config, task="day_one")
             out = llm_client.chat_completions(
-                model=config.llm.model,
+                model=model,
                 messages=[ChatMessage(role="system", content=sys_msg), ChatMessage(role="user", content=user_msg)],
                 temperature=config.llm.temperature,
                 max_tokens=int(config.llm.max_tokens),
@@ -383,17 +584,34 @@ class Semanticist:
             parsed = _json.loads(out)
             if isinstance(parsed, dict):
                 self.kg.module_graph.graph["day_one_answers"] = parsed
+                if trace is not None:
+                    trace.append(
+                        {
+                            "ts": self._utc_now(),
+                            "agent": "semanticist",
+                            "action": "day_one_answers",
+                            "method": "llm",
+                            "confidence": 0.5,
+                            "model": model,
+                        }
+                    )
         except Exception:
             # Deterministic fallback: keep empty if LLM unavailable.
             self.kg.module_graph.graph["day_one_answers"] = {
                 "error": "LLM unavailable for day-one answers. Start LM Studio server and re-run semanticist.",
             }
 
-    def run(self, repo_root: Path, config: CartographyConfig | None = None) -> None:
+    def run(
+        self,
+        repo_root: Path,
+        config: CartographyConfig | None = None,
+        trace: list[dict] | None = None,
+        output_dir: Path | None = None,
+    ) -> None:
         """
         Full semanticist phase.
         """
         config = config or CartographyConfig()
-        self.annotate_modules(repo_root, config=config)
+        self.annotate_modules(repo_root, config=config, trace=trace, output_dir=output_dir)
         if config.semanticist.day_one_answers:
-            self.answer_day_one_questions(repo_root, config=config)
+            self.answer_day_one_questions(repo_root, config=config, trace=trace)

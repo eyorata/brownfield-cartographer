@@ -153,7 +153,7 @@ def main():
         cfg = load_config(args.config)
         kg = KnowledgeGraph()
         kg.load_from_dir(graph_dir)
-        nav = Navigator(kg, repo_root=repo_root, config=cfg)
+        nav = Navigator(kg, repo_root=repo_root, config=cfg, graph_dir=graph_dir)
 
         print(f"Loaded graphs from: {graph_dir}")
         print("Type 'help' for commands. Type 'exit' to quit.")
@@ -170,17 +170,16 @@ def main():
 
             if raw in {"exit", "quit"}:
                 break
-
-                if raw in {"help", "?"}:
-                    print("Commands:")
-                    print("  stats")
-                    print("  sources [N]")
-                    print("  sinks [N]")
-                    print("  blast <node>")
-                    print("  trace up <node> [depth] | trace down <node> [depth]")
-                    print("  module <relative/path.py>")
-                    print("  ask <natural language question>  (LangGraph/LLM)")
-                    continue
+            if raw in {"help", "?"}:
+                print("Commands:")
+                print("  stats")
+                print("  sources [N]")
+                print("  sinks [N]")
+                print("  blast <node>")
+                print("  trace up <node> [depth] | trace down <node> [depth]")
+                print("  module <relative/path.py>")
+                print("  ask <natural language question>  (LangGraph/LLM)")
+                continue
 
             parts = raw.split()
             cmd = parts[0].lower()

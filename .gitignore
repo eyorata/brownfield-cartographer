@@ -17,6 +17,7 @@ venv.bak/
 !.cartography/CODEBASE.md
 !.cartography/onboarding_brief.md
 !.cartography/cartography_trace.jsonl
+!.cartography/semantic_index.json
 _targets/
 _tmp/
 artifacts/

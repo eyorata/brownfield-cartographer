@@ -150,14 +150,58 @@ class TreeSitterAnalyzer:
         function_defs: List[Dict[str, Any]] = []
         classes: List[str] = []
         class_defs: List[Dict[str, Any]] = []
-        data_ops: List[Dict[str, str]] = []
+        data_ops: List[Dict[str, Any]] = []
+
+        def _line_range(node: ast.AST) -> str:
+            start = int(getattr(node, "lineno", 1) or 1)
+            end = int(getattr(node, "end_lineno", start) or start)
+            if end < start:
+                end = start
+            return f"{start}-{end}"
+
+        def _call_path(fn: ast.AST) -> str:
+            parts: List[str] = []
+            cur = fn
+            while isinstance(cur, ast.Attribute):
+                parts.append(cur.attr)
+                cur = cur.value
+            base = ""
+            if isinstance(cur, ast.Name):
+                base = cur.id
+            parts.reverse()
+            if base and parts:
+                return base + "." + ".".join(parts)
+            if parts:
+                return ".".join(parts)
+            return base
+
+        def _string_literals(call_node: ast.Call) -> List[str]:
+            lits: List[str] = []
+            for a in list(call_node.args) + [kw.value for kw in call_node.keywords if kw.value is not None]:
+                if isinstance(a, ast.Constant) and isinstance(a.value, str):
+                    lits.append(a.value)
+            return lits
+
+        def _looks_like_sql(s: str) -> bool:
+            if not s or len(s) < 12:
+                return False
+            sl = s.lower()
+            return any(k in sl for k in (" select ", "\nselect ", " from ", " join ", " insert ", " update ", " merge "))
 
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name:
                         imports.append(alias.name)
-                        import_modules.append({"kind": "import", "module": alias.name, "level": 0, "names": []})
+                        import_modules.append(
+                            {
+                                "kind": "import",
+                                "module": alias.name,
+                                "level": 0,
+                                "names": [],
+                                "line_range": _line_range(node),
+                            }
+                        )
             elif isinstance(node, ast.ImportFrom):
                 if node.module:
                     imports.append(node.module)
@@ -167,6 +211,7 @@ class TreeSitterAnalyzer:
                         "module": node.module or "",
                         "level": int(getattr(node, "level", 0) or 0),
                         "names": [a.name for a in node.names if getattr(a, "name", None)],
+                        "line_range": _line_range(node),
                     }
                 )
             elif isinstance(node, ast.FunctionDef):
@@ -181,22 +226,72 @@ class TreeSitterAnalyzer:
                 classes.append(node.name)
                 class_defs.append({"name": node.name, "bases": "", "decorators": []})
             elif isinstance(node, ast.Call):
-                # Minimal heuristic; details used later by the Hydrologist.
+                call_path = _call_path(node.func)
                 func_name = ""
                 if isinstance(node.func, ast.Name):
                     func_name = node.func.id
                 elif isinstance(node.func, ast.Attribute):
                     func_name = node.func.attr
-                if any(k in func_name for k in ("read_csv", "read_sql", "execute", "read", "write")):
+
+                pandas_reads = {
+                    "read_csv",
+                    "read_parquet",
+                    "read_json",
+                    "read_excel",
+                    "read_sql",
+                    "read_sql_query",
+                    "read_table",
+                }
+                pandas_writes = {
+                    "to_csv",
+                    "to_parquet",
+                    "to_json",
+                    "to_sql",
+                }
+                spark_reads = {"csv", "parquet", "json", "table", "text", "format", "load"}
+                spark_writes = {"saveastable", "insertinto", "parquet", "csv", "json", "save", "format"}
+
+                op_type = ""
+                direction = ""
+                if func_name in pandas_reads or call_path.endswith(tuple("." + x for x in pandas_reads)):
+                    op_type = f"pandas_{func_name}"
+                    direction = "read"
+                elif func_name in pandas_writes or call_path.endswith(tuple("." + x for x in pandas_writes)):
+                    op_type = f"pandas_{func_name}"
+                    direction = "write"
+                elif call_path.startswith("spark.read.") and func_name.lower() in spark_reads:
+                    op_type = f"pyspark_read_{func_name.lower()}"
+                    direction = "read"
+                elif ".write." in call_path.lower() and func_name.lower() in spark_writes:
+                    op_type = f"pyspark_write_{func_name.lower()}"
+                    direction = "write"
+                elif call_path.startswith("spark.sql") or func_name == "sql":
+                    op_type = "pyspark_sql"
+                    direction = "sql"
+                elif func_name == "execute" or call_path.endswith(".execute"):
+                    op_type = "sqlalchemy_execute"
+                    direction = "sql"
+
+                if op_type:
                     try:
                         args_src = ast.get_source_segment(source, node) or ""
                     except Exception:
                         args_src = ""
-                    literals: List[str] = []
-                    for a in list(node.args) + [kw.value for kw in node.keywords if kw.value is not None]:
-                        if isinstance(a, ast.Constant) and isinstance(a.value, str):
-                            literals.append(a.value)
-                    data_ops.append({"type": func_name, "args": args_src, "literals": literals})
+                    literals = _string_literals(node)
+                    sql_literals = [s for s in literals if _looks_like_sql(s)]
+                    unresolved = bool(direction in {"read", "write", "sql"} and not literals)
+                    data_ops.append(
+                        {
+                            "type": op_type,
+                            "direction": direction,
+                            "call_path": call_path,
+                            "args": args_src,
+                            "literals": literals,
+                            "sql_literals": sql_literals,
+                            "line_range": _line_range(node),
+                            "unresolved": unresolved,
+                        }
+                    )
 
         return {
             "imports": sorted(set(imports)),
@@ -223,15 +318,18 @@ class TreeSitterAnalyzer:
     def analyze_python_module(self, file_path: str) -> Dict[str, Any]:
         """Extracts imports, public functions, classes."""
         # Prefer tree-sitter when available for richer structural extraction.
+        ast_result = self._analyze_python_ast(file_path)
         if self.parser:
             ts_result = self._analyze_python_tree_sitter(file_path)
             if ts_result["imports"] or ts_result["functions"] or ts_result["classes"]:
                 # Always merge in AST-based import info for relative import resolution.
-                ast_imports = self._analyze_python_ast(file_path).get("import_modules", [])
+                ast_imports = ast_result.get("import_modules", [])
                 ts_result["import_modules"] = ast_imports
+                # Prefer richer AST data-op extraction for lineage (better literals + line ranges).
+                if ast_result.get("data_ops"):
+                    ts_result["data_ops"] = ast_result.get("data_ops") or []
                 return ts_result
 
-        ast_result = self._analyze_python_ast(file_path)
         if ast_result["imports"] or ast_result["functions"] or ast_result["classes"]:
             return ast_result
 

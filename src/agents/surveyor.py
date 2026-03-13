@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from typing import Dict, Any
 import networkx as nx
+from datetime import datetime, timezone
 
 _SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
@@ -93,7 +94,7 @@ class Surveyor:
 
         return rank
 
-    def analyze(self, repo_path: str | Path, only_files: set[str] | None = None):
+    def analyze(self, repo_path: str | Path, only_files: set[str] | None = None, trace: list[dict] | None = None):
         print(f"Surveyor analyzing structure of {repo_path}")
 
         base_path = Path(repo_path).resolve()
@@ -116,6 +117,7 @@ class Surveyor:
                     "env",
                     ".venv",
                     ".cartography",
+                    "artifacts",
                     "_targets",
                     "_tmp",
                     "node_modules",
@@ -171,6 +173,23 @@ class Surveyor:
                         self.kg.module_graph.nodes[rel_path]["import_modules"] = data.get("import_modules") or []
                     except Exception:
                         pass
+                    if trace is not None:
+                        try:
+                            trace.append(
+                                {
+                                    "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                    "agent": "surveyor",
+                                    "action": "python_structure",
+                                    "file": rel_path,
+                                    "method": "static",
+                                    "confidence": 0.8,
+                                    "functions": len(data.get("functions") or []),
+                                    "classes": len(data.get("classes") or []),
+                                    "imports": len(data.get("import_modules") or []),
+                                }
+                            )
+                        except Exception:
+                            pass
 
                 if ext == ".py":
                     import_specs = data.get("import_modules") or []
@@ -182,7 +201,7 @@ class Surveyor:
                     if Path(rel_path).name == "__init__.py":
                         rel_dir_parts = Path(rel_path).parent.parts
 
-                    def resolve_module(module_parts):
+                    def resolve_module(module_parts, line_range: str = "1-1"):
                         if not module_parts:
                             return
                         candidate = base_path / Path(*module_parts)
@@ -196,7 +215,7 @@ class Surveyor:
                                     target_module=target,
                                     weight=1,
                                     source_file=rel_path,
-                                    line_range="1",
+                                    line_range=line_range,
                                 )
                             )
                         elif pkg_init.exists():
@@ -207,7 +226,7 @@ class Surveyor:
                                     target_module=target,
                                     weight=1,
                                     source_file=rel_path,
-                                    line_range="1",
+                                    line_range=line_range,
                                 )
                             )
 
@@ -217,6 +236,7 @@ class Surveyor:
                             module = str(spec.get("module") or "")
                             level = int(spec.get("level") or 0)
                             names = spec.get("names") or []
+                            lr = str(spec.get("line_range") or "1-1")
                         except Exception:
                             continue
 
@@ -226,17 +246,17 @@ class Surveyor:
                             base_parts = list(rel_dir_parts)
                             if up:
                                 base_parts = base_parts[:-up] if up <= len(base_parts) else []
-                            resolve_module(base_parts + module_parts)
+                            resolve_module(base_parts + module_parts, line_range=lr)
                             if kind == "from":
                                 for name in names:
                                     name_parts = [p for p in str(name).split(".") if p]
-                                    resolve_module(base_parts + module_parts + name_parts)
+                                    resolve_module(base_parts + module_parts + name_parts, line_range=lr)
                         else:
-                            resolve_module(module_parts)
+                            resolve_module(module_parts, line_range=lr)
                             if kind == "from":
                                 for name in names:
                                     name_parts = [p for p in str(name).split(".") if p]
-                                    resolve_module(module_parts + name_parts)
+                                    resolve_module(module_parts + name_parts, line_range=lr)
                         
         try:
             ranks = self._pagerank_power_iteration(self.kg.module_graph)

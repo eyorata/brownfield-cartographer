@@ -2,6 +2,7 @@ import os
 import sys
 from pathlib import Path
 import networkx as nx
+from datetime import datetime, timezone
 
 _SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
@@ -15,6 +16,10 @@ class Hydrologist:
     def __init__(self, kg: KnowledgeGraph):
         self.kg = kg
 
+    @staticmethod
+    def _utc_now() -> str:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
     def _ensure_dataset(self, name: str, owner: str | None = None) -> None:
         if name in self.kg.lineage_graph:
             return
@@ -25,7 +30,14 @@ class Hydrologist:
         node = DatasetNode(name=name, storage_type=storage_type, owner=owner)
         self.kg.add_dataset_node(node)
 
-    def analyze(self, repo_path: str | Path, only_files: set[str] | None = None):
+    @staticmethod
+    def _looks_like_sql(s: str) -> bool:
+        if not s or len(s) < 12:
+            return False
+        sl = s.lower()
+        return any(k in sl for k in (" select ", "\nselect ", " from ", " join ", " insert ", " update ", " merge "))
+
+    def analyze(self, repo_path: str | Path, only_files: set[str] | None = None, trace: list[dict] | None = None):
         print(f"Hydrologist analyzing data lineage of {repo_path}")
         from analyzers.tree_sitter_analyzer import TreeSitterAnalyzer
         from analyzers.sql_lineage import SQLLineageAnalyzer
@@ -39,6 +51,8 @@ class Hydrologist:
         only_files_norm = None
         if only_files:
             only_files_norm = {str(Path(p).as_posix()) for p in only_files}
+
+        unresolved_python_ops: list[dict] = []
         
         for root, dirs, files in os.walk(base_path):
             dirs[:] = [
@@ -52,6 +66,7 @@ class Hydrologist:
                     "env",
                     ".venv",
                     ".cartography",
+                    "artifacts",
                     "_targets",
                     "_tmp",
                     "node_modules",
@@ -63,7 +78,7 @@ class Hydrologist:
                 if only_files_norm is not None and rel_path not in only_files_norm:
                     continue
                 
-                if file.endswith('.py'):
+                if file.endswith(".py"):
                     try:
                         data = ts_analyzer.analyze_python_module(str(file_path))
                     except Exception as e:
@@ -75,29 +90,72 @@ class Hydrologist:
                         continue
 
                     # Represent each python file as a transformation node.
-                    sources: list[str] = []
-                    targets: list[str] = []
+                    sources: set[str] = set()
+                    targets: set[str] = set()
+                    src_lr: dict[str, str] = {}
+                    tgt_lr: dict[str, str] = {}
+                    min_line = 10**9
+                    max_line = 1
                     for op in ops:
                         op_type = str(op.get("type") or "")
-                        literals = op.get("literals") or []
-                        lit = literals[0] if literals else None
-                        if not lit:
-                            continue
+                        direction = str(op.get("direction") or "")
+                        line_range = str(op.get("line_range") or "1-1")
+                        try:
+                            a, b = [int(x) for x in line_range.split("-", 1)]
+                            min_line = min(min_line, a)
+                            max_line = max(max_line, b)
+                        except Exception:
+                            pass
 
-                        if "read" in op_type:
-                            sources.append(lit)
-                        if "write" in op_type or "to_" in op_type:
-                            targets.append(lit)
+                        call_path = str(op.get("call_path") or "")
+                        args = str(op.get("args") or "")
+                        literals = op.get("literals") or []
+                        if op.get("unresolved"):
+                            unresolved_python_ops.append(
+                                {
+                                    "file": rel_path,
+                                    "type": op_type,
+                                    "call_path": call_path,
+                                    "args": args[:500],
+                                    "line_range": line_range,
+                                }
+                            )
+
+                        # File/table-like literals (pandas/pyspark read/write)
+                        if direction in {"read", "write"}:
+                            for lit in [str(x) for x in literals if isinstance(x, str) and x.strip()]:
+                                if direction == "read":
+                                    sources.add(lit)
+                                    src_lr.setdefault(lit, line_range)
+                                else:
+                                    targets.add(lit)
+                                    tgt_lr.setdefault(lit, line_range)
+
+                        # Inline SQL strings inside Python calls (read_sql/execute/spark.sql).
+                        sql_literals = op.get("sql_literals") or []
+                        for sql_text in [str(x) for x in sql_literals if isinstance(x, str) and x.strip()]:
+                            if not self._looks_like_sql(sql_text):
+                                continue
+                            try:
+                                deps = sql_analyzer.extract_dependencies(sql_text, dialect="postgres")
+                            except Exception:
+                                deps = {}
+                            for s in deps.get("sources", []) or []:
+                                sources.add(str(s))
+                                src_lr.setdefault(str(s), line_range)
+                            for t in deps.get("targets", []) or []:
+                                targets.add(str(t))
+                                tgt_lr.setdefault(str(t), line_range)
 
                     if not sources and not targets:
                         continue
 
                     t_node = TransformationNode(
-                        source_datasets=sorted(set(sources)),
-                        target_datasets=sorted(set(targets)),
+                        source_datasets=sorted(sources),
+                        target_datasets=sorted(targets),
                         transformation_type="python",
                         source_file=rel_path,
-                        line_range="1-1",
+                        line_range=f"{min_line}-{max_line}" if min_line != 10**9 else "1-1",
                     )
                     self.kg.add_transformation_node(t_node)
 
@@ -109,7 +167,7 @@ class Hydrologist:
                                 dataset=s,
                                 transformation_type="python",
                                 source_file=rel_path,
-                                line_range="1",
+                                line_range=str(src_lr.get(s) or "1-1"),
                             )
                         )
                     for t in t_node.target_datasets:
@@ -120,10 +178,24 @@ class Hydrologist:
                                 dataset=t,
                                 transformation_type="python",
                                 source_file=rel_path,
-                                line_range="1",
+                                line_range=str(tgt_lr.get(t) or "1-1"),
                             )
                         )
-                elif file.endswith('.sql'):
+                    if trace is not None:
+                        trace.append(
+                            {
+                                "ts": self._utc_now(),
+                                "agent": "hydrologist",
+                                "action": "python_lineage",
+                                "file": rel_path,
+                                "method": "static",
+                                "confidence": 0.75,
+                                "sources": sorted(sources)[:100],
+                                "targets": sorted(targets)[:100],
+                            }
+                        )
+
+                elif file.endswith(".sql"):
                     try:
                         with open(file_path, 'r', encoding='utf-8') as f:
                             sql_query = f.read()
@@ -136,41 +208,126 @@ class Hydrologist:
                         sources = deps.get("sources", [])
                         
                         if targets or sources:
+                            n_lines = max(1, len(sql_query.splitlines()))
                             t_node = TransformationNode(
                                 source_datasets=sources,
                                 target_datasets=targets,
                                 transformation_type="sql",
                                 source_file=rel_path,
-                                line_range="1-1",
+                                line_range=f"1-{n_lines}",
                             )
                             self.kg.add_transformation_node(t_node)
                             
                             for s in sources:
                                 self._ensure_dataset(s, owner="sql")
-                                line_nums = (deps.get("ref_line_numbers", {}) or {}).get(s) or (deps.get("source_line_numbers", {}) or {}).get(s) or []
-                                line = str(line_nums[0]) if line_nums else "1"
+                                line_nums = (deps.get("dataset_line_numbers", {}) or {}).get(s) or []
+                                line = int(line_nums[0]) if line_nums else 1
                                 self.kg.add_consumes_edge(
                                     ConsumesEdge(
                                         transformation=rel_path,
                                         dataset=s,
                                         transformation_type="sql",
                                         source_file=rel_path,
-                                        line_range=line,
+                                        line_range=f"{line}-{line}",
                                     )
                                 )
                             for t in targets:
                                 self._ensure_dataset(t, owner="sql")
+                                line_nums = (deps.get("dataset_line_numbers", {}) or {}).get(t) or []
+                                line = int(line_nums[0]) if line_nums else 1
                                 self.kg.add_produces_edge(
                                     ProducesEdge(
                                         transformation=rel_path,
                                         dataset=t,
                                         transformation_type="sql",
                                         source_file=rel_path,
-                                        line_range="1",
+                                        line_range=f"{line}-{line}",
                                     )
+                                )
+                            if trace is not None:
+                                trace.append(
+                                    {
+                                        "ts": self._utc_now(),
+                                        "agent": "hydrologist",
+                                        "action": "sql_lineage",
+                                        "file": rel_path,
+                                        "method": "static",
+                                        "confidence": 0.85 if deps.get("dialect_used") else 0.55,
+                                        "dialect_used": deps.get("dialect_used"),
+                                        "sources": list(sources)[:200],
+                                        "targets": list(targets)[:200],
+                                    }
                                 )
                     except Exception as e:
                         print(f"Failed to process {file_path}: {e}")
+
+                elif file.endswith((".yml", ".yaml")):
+                    # Only parse dbt schema-style YAML (models/sources). Skip dbt_project.yml and other non-schema files.
+                    if file_path.name.lower() in {"dbt_project.yml", "packages.yml", "profiles.yml"}:
+                        continue
+
+                    configs = yaml_parser.parse_dbt_yaml(str(file_path))
+                    for conf in configs:
+                        if conf.get("type") == "source":
+                            name = str(conf.get("name") or "").strip()
+                            if name:
+                                self._ensure_dataset(name, owner="dbt_source")
+                        if conf.get("type") == "model":
+                            name = str(conf.get("name") or "").strip()
+                            if name:
+                                # dbt models are datasets too; schema.yml may be the only mention.
+                                self._ensure_dataset(name, owner="dbt_model")
+
+                    # Best-effort airflow YAML parsing for simple declarative task graphs.
+                    airflow = yaml_parser.parse_airflow_yaml(str(file_path))
+                    if airflow:
+                        for item in airflow:
+                            if item.get("type") != "task":
+                                continue
+                            task_id = f"airflow_task:{item['id']}"
+                            if task_id not in self.kg.lineage_graph:
+                                self.kg.add_transformation_node(
+                                    TransformationNode(
+                                        source_datasets=[],
+                                        target_datasets=[],
+                                        transformation_type="airflow_task",
+                                        source_file=task_id,
+                                        line_range="1-1",
+                                    )
+                                )
+                            for upstream in item.get("depends_on", []):
+                                upstream_id = f"airflow_task:{upstream}"
+                                if upstream_id not in self.kg.lineage_graph:
+                                    self.kg.add_transformation_node(
+                                        TransformationNode(
+                                            source_datasets=[],
+                                            target_datasets=[],
+                                            transformation_type="airflow_task",
+                                            source_file=upstream_id,
+                                            line_range="1-1",
+                                        )
+                                    )
+                                self.kg.lineage_graph.add_edge(
+                                    upstream_id,
+                                    task_id,
+                                    edge_type="depends_on",
+                                    transformation_type="airflow_task",
+                                    source_file=rel_path,
+                                    line_range="1-1",
+                                )
+                        if trace is not None:
+                            trace.append(
+                                {
+                                    "ts": self._utc_now(),
+                                    "agent": "hydrologist",
+                                    "action": "yaml_config",
+                                    "file": rel_path,
+                                    "method": "static",
+                                    "confidence": 0.6,
+                                    "dbt_items": len(configs),
+                                    "airflow_tasks": len([x for x in airflow if x.get("type") == "task"]),
+                                }
+                            )
 
         # Reduce noise: sqlglot fails on Jinja-heavy dbt SQL. Summarize instead of spamming logs.
         try:
@@ -178,7 +335,9 @@ class Hydrologist:
         except Exception:
             failures = []
         if failures:
-            print(f"SQL parse failures (sqlglot): {len(failures)} samples (Jinja/templates are expected). Showing up to 5:")
+            print(
+                f"SQL parse failures (sqlglot): {len(failures)} samples (Jinja/templates are expected). Showing up to 5:"
+            )
             for f in failures[:5]:
                 err = f.get("error") or ""
                 snip = f.get("snippet") or ""
@@ -186,46 +345,24 @@ class Hydrologist:
                 if snip:
                     print(snip)
                     print("")
-                            
-                elif file.endswith(('.yml', '.yaml')):
-                    # Only parse dbt schema-style YAML (models/sources). Skip dbt_project.yml and other non-schema files.
-                    if file_path.name.lower() in {"dbt_project.yml", "packages.yml", "profiles.yml"}:
-                        continue
 
-                    configs = yaml_parser.parse_dbt_yaml(str(file_path))
-                    for conf in configs:
-                        if conf["type"] == "source":
-                            name = conf["name"]
-                            self._ensure_dataset(name, owner="dbt")
-
-                    # Best-effort airflow YAML parsing for simple declarative task graphs.
-                    airflow = yaml_parser.parse_airflow_yaml(str(file_path))
-                    for item in airflow:
-                        if item.get("type") != "task":
-                            continue
-                        task_id = f"airflow_task:{item['id']}"
-                        self.kg.add_transformation_node(
-                            TransformationNode(
-                                source_datasets=[],
-                                target_datasets=[],
-                                transformation_type="airflow_task",
-                                source_file=task_id,
-                                line_range="1-1",
-                            )
-                        )
-                        for upstream in item.get("depends_on", []):
-                            upstream_id = f"airflow_task:{upstream}"
-                            if upstream_id not in self.kg.lineage_graph:
-                                self.kg.add_transformation_node(
-                                    TransformationNode(
-                                        source_datasets=[],
-                                        target_datasets=[],
-                                        transformation_type="airflow_task",
-                                        source_file=upstream_id,
-                                        line_range="1-1",
-                                    )
-                                )
-                            self.kg.lineage_graph.add_edge(upstream_id, task_id, edge_type="depends_on", source_file=rel_path)
+        if unresolved_python_ops:
+            # Required by rubric: log dynamic references we cannot resolve statically.
+            print(f"Unresolved Python data references: {len(unresolved_python_ops)} (showing up to 10)")
+            for it in unresolved_python_ops[:10]:
+                print(f"- {it.get('file')}:{it.get('line_range')}  {it.get('type')}  {it.get('call_path')}")
+            if trace is not None:
+                trace.append(
+                    {
+                        "ts": self._utc_now(),
+                        "agent": "hydrologist",
+                        "action": "unresolved_python_ops",
+                        "method": "static",
+                        "confidence": 0.35,
+                        "count": len(unresolved_python_ops),
+                        "samples": unresolved_python_ops[:25],
+                    }
+                )
                                 
     def find_sources(self):
         # Prefer dataset entry points (tables/files) as "sources".

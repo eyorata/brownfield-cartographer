@@ -14,6 +14,8 @@ from agents.archivist import Archivist
 from graph.knowledge_graph import KnowledgeGraph
 from config import CartographyConfig
 import subprocess
+import json
+import shutil
 
 
 def _require_runtime_deps() -> None:
@@ -53,7 +55,7 @@ class Orchestrator:
         print(f"Starting orchestration for: {repo_root}")
 
         phases = [p.lower() for p in (phases or ["surveyor", "hydrologist", "semanticist", "archivist"])]
-        trace = [{"ts": self._utc_now(), "event": "start", "repo_root": str(repo_root), "phases": phases}]
+        trace: list[dict] = [{"ts": self._utc_now(), "event": "start", "repo_root": str(repo_root), "phases": phases}]
         config = config or CartographyConfig()
 
         # Incremental mode will be implemented fully (prune + re-run only changed files).
@@ -62,18 +64,37 @@ class Orchestrator:
             if not config.incremental.enabled:
                 incremental = False
             else:
-                changed_files = self._git_changed_files(repo_root, config.incremental.diff_range)
-                if not changed_files:
-                    incremental = False
-                else:
+                # Prefer "since last successful run" if metadata exists; else fall back to config.diff_range.
+                prev = self._read_run_metadata(repo_root).get("head_sha")
+                head = self._git_head_sha(repo_root)
+                if prev and head and prev != head:
+                    changed_files = self._git_changed_files(repo_root, f"{prev}..{head}")
                     trace.append(
                         {
                             "ts": self._utc_now(),
                             "event": "incremental",
-                            "diff_range": config.incremental.diff_range,
+                            "mode": "since_last_run",
+                            "prev_sha": prev,
+                            "head_sha": head,
                             "changed_files": sorted(changed_files)[:500],
                         }
                     )
+                else:
+                    changed_files = self._git_changed_files(repo_root, config.incremental.diff_range)
+                if not changed_files:
+                    incremental = False
+                else:
+                    # If we used config.diff_range, log it for reproducibility.
+                    if not (prev and head and prev != head):
+                        trace.append(
+                            {
+                                "ts": self._utc_now(),
+                                "event": "incremental",
+                                "mode": "diff_range",
+                                "diff_range": config.incremental.diff_range,
+                                "changed_files": sorted(changed_files)[:500],
+                            }
+                        )
         
         # If incremental, load previous graphs from target output and prune affected nodes/edges.
         target_out = repo_root / ".cartography"
@@ -90,21 +111,28 @@ class Orchestrator:
         # Surveyor Phase
         if "surveyor" in phases:
             trace.append({"ts": self._utc_now(), "event": "phase_start", "phase": "surveyor"})
-            self.surveyor.analyze(repo_root, only_files=changed_files)
+            self.surveyor.analyze(repo_root, only_files=changed_files, trace=trace)
             trace.append({"ts": self._utc_now(), "event": "phase_end", "phase": "surveyor"})
-        
+            # Preserve partial results in case a later phase fails.
+            target_out.mkdir(exist_ok=True, parents=True)
+            self.kg.serialize_module_graph(target_out / "module_graph.json")
+
         # Hydrologist Phase
         if "hydrologist" in phases:
             trace.append({"ts": self._utc_now(), "event": "phase_start", "phase": "hydrologist"})
-            self.hydrologist.analyze(repo_root, only_files=changed_files)
+            self.hydrologist.analyze(repo_root, only_files=changed_files, trace=trace)
             trace.append({"ts": self._utc_now(), "event": "phase_end", "phase": "hydrologist"})
+            target_out.mkdir(exist_ok=True, parents=True)
+            self.kg.serialize_lineage_graph(target_out / "lineage_graph.json")
 
         # Semanticist Phase
         if "semanticist" in phases and config.semanticist.enabled:
             trace.append({"ts": self._utc_now(), "event": "phase_start", "phase": "semanticist"})
-            self.semanticist.run(repo_root, config=config)
+            self.semanticist.run(repo_root, config=config, trace=trace, output_dir=target_out)
             trace.append({"ts": self._utc_now(), "event": "phase_end", "phase": "semanticist"})
-        
+            target_out.mkdir(exist_ok=True, parents=True)
+            self.kg.serialize_module_graph(target_out / "module_graph.json")
+
         # Serialization Phase
         # Always write artifacts into the analyzed repo's `.cartography/`.
         target_out.mkdir(exist_ok=True, parents=True)
@@ -120,6 +148,13 @@ class Orchestrator:
             if extra_out != target_out:
                 self.kg.serialize_module_graph(extra_out / "module_graph.json")
                 self.kg.serialize_lineage_graph(extra_out / "lineage_graph.json")
+                # Copy semantic index if present (built by Semanticist).
+                try:
+                    si = target_out / "semantic_index.json"
+                    if si.exists():
+                        shutil.copy2(si, extra_out / "semantic_index.json")
+                except Exception:
+                    pass
 
         # Archivist Phase (writes markdown context + trace)
         out_dirs = [target_out]
@@ -134,6 +169,14 @@ class Orchestrator:
                 self.archivist.write_trace(od, trace)
             trace.append({"ts": self._utc_now(), "event": "phase_end", "phase": "archivist"})
 
+        # Record metadata for incremental runs.
+        try:
+            head = self._git_head_sha(repo_root)
+            if head:
+                self._write_run_metadata(repo_root, {"head_sha": head, "ts": self._utc_now()})
+        except Exception:
+            pass
+
         if extra_out and extra_out != target_out:
             print(f"Orchestration complete. Artifacts saved in: {target_out} and {extra_out}")
         else:
@@ -144,6 +187,15 @@ class Orchestrator:
         from datetime import datetime, timezone
 
         return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    @staticmethod
+    def _git_head_sha(repo_root: Path) -> str:
+        try:
+            cmd = ["git", "-c", f"safe.directory={repo_root.resolve()}", "rev-parse", "HEAD"]
+            r = subprocess.run(cmd, cwd=str(repo_root), capture_output=True, text=True, check=True)
+            return r.stdout.strip()
+        except Exception:
+            return ""
 
     @staticmethod
     def _git_changed_files(repo_root: Path, diff_range: str) -> set[str]:
@@ -168,6 +220,23 @@ class Orchestrator:
             return out
         except Exception:
             return set()
+
+    @staticmethod
+    def _read_run_metadata(repo_root: Path) -> dict:
+        p = repo_root / ".cartography" / "run_metadata.json"
+        if not p.exists():
+            return {}
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _write_run_metadata(repo_root: Path, data: dict) -> None:
+        p = repo_root / ".cartography" / "run_metadata.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 if __name__ == "__main__":
     _require_runtime_deps()

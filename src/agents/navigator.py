@@ -17,6 +17,7 @@ from config import CartographyConfig
 from agents.hydrologist import Hydrologist
 from graph.knowledge_graph import KnowledgeGraph
 from llm import ChatMessage, OpenAICompatClient
+from graph.semantic_index import SemanticIndex
 
 
 @dataclass(frozen=True)
@@ -47,7 +48,13 @@ class Navigator:
       (for the "Master Thinker" rubric).
     """
 
-    def __init__(self, kg: KnowledgeGraph, repo_root: Path | None = None, config: CartographyConfig | None = None):
+    def __init__(
+        self,
+        kg: KnowledgeGraph,
+        repo_root: Path | None = None,
+        config: CartographyConfig | None = None,
+        graph_dir: Path | None = None,
+    ):
         self.kg = kg
         self.repo_root = repo_root
         self.config = config or CartographyConfig()
@@ -57,6 +64,13 @@ class Navigator:
             api_key=self.config.llm.api_key,
             timeout_s=self.config.llm.timeout_s,
         )
+        self.semantic_index: SemanticIndex | None = None
+        try:
+            gd = graph_dir or (self.repo_root / ".cartography" if self.repo_root else None)
+            if gd:
+                self.semantic_index = SemanticIndex.load(Path(gd) / "semantic_index.json")
+        except Exception:
+            self.semantic_index = None
 
     def stats(self) -> Dict[str, Any]:
         return {
@@ -157,32 +171,67 @@ class Navigator:
         q = (query or "").strip()
         if not q:
             return {"ok": False, "result": "query is empty", "citations": []}
-        ql = q.lower()
         matches: List[Dict[str, Any]] = []
-        for node_id, attrs in self.kg.module_graph.nodes(data=True):
-            path = str(node_id)
-            a = dict(attrs)
-            fn = [f.get("name") for f in (a.get("function_defs") or []) if isinstance(f, dict) and f.get("name")]
-            cl = [c.get("name") for c in (a.get("class_defs") or []) if isinstance(c, dict) and c.get("name")]
-            hay = " ".join([path] + [str(x) for x in fn + cl]).lower()
-            if ql in hay:
+
+        # Prefer semantic index vector search when available (rubric expectation).
+        if self.semantic_index is not None:
+            try:
+                vec_hits = self.semantic_index.search(
+                    q,
+                    top_k=limit,
+                    client=self._llm if self.semantic_index.embedding_kind == "embedding" else None,
+                )
+            except Exception:
+                vec_hits = []
+            for hit in vec_hits:
+                path = str(hit.get("module") or "")
+                if path not in self.kg.module_graph:
+                    continue
+                a = dict(self.kg.module_graph.nodes[path])
+                fn = [f.get("name") for f in (a.get("function_defs") or []) if isinstance(f, dict) and f.get("name")]
+                cl = [c.get("name") for c in (a.get("class_defs") or []) if isinstance(c, dict) and c.get("name")]
                 matches.append(
                     {
                         "module": path,
+                        "score": float(hit.get("score") or 0.0),
                         "functions": fn[:12],
                         "classes": cl[:12],
                         "pagerank": float(a.get("pagerank") or 0.0),
                         "velocity_30d": int(a.get("change_velocity_30d") or 0),
+                        "method": "vector",
                     }
                 )
-        matches.sort(key=lambda m: (m.get("pagerank", 0.0), m.get("velocity_30d", 0)), reverse=True)
-        matches = matches[:limit]
+            matches.sort(key=lambda m: (m.get("score", 0.0), m.get("pagerank", 0.0), m.get("velocity_30d", 0)), reverse=True)
+            matches = matches[:limit]
+
+        # Fallback: substring search over paths + symbol names.
+        if not matches:
+            ql = q.lower()
+            for node_id, attrs in self.kg.module_graph.nodes(data=True):
+                path = str(node_id)
+                a = dict(attrs)
+                fn = [f.get("name") for f in (a.get("function_defs") or []) if isinstance(f, dict) and f.get("name")]
+                cl = [c.get("name") for c in (a.get("class_defs") or []) if isinstance(c, dict) and c.get("name")]
+                hay = " ".join([path] + [str(x) for x in fn + cl]).lower()
+                if ql in hay:
+                    matches.append(
+                        {
+                            "module": path,
+                            "functions": fn[:12],
+                            "classes": cl[:12],
+                            "pagerank": float(a.get("pagerank") or 0.0),
+                            "velocity_30d": int(a.get("change_velocity_30d") or 0),
+                            "method": "substring",
+                        }
+                    )
+            matches.sort(key=lambda m: (m.get("pagerank", 0.0), m.get("velocity_30d", 0)), reverse=True)
+            matches = matches[:limit]
 
         citations: List[str] = []
         for m in matches[:10]:
             c = self._read_file_snippet(m["module"], 1, 60)
             if c:
-                citations.append(f"{c.file}:{c.line_range}")
+                citations.append(f"{c.file}:{c.line_range} (static)")
         return {"ok": True, "result": matches, "citations": citations}
 
     def _edge_citations_for_path(self, path: List[str]) -> List[str]:
@@ -195,7 +244,7 @@ class Navigator:
             sf = str(data.get("source_file") or "")
             lr = str(data.get("line_range") or "")
             if sf and lr:
-                cites.append(f"{sf}:{lr}")
+                cites.append(f"{sf}:{lr} (static)")
         out: List[str] = []
         seen = set()
         for c in cites:
@@ -240,7 +289,7 @@ class Navigator:
             "imports_in_count": len(info.get("imports_in") or []),
         }
         c = self._read_file_snippet(module_path, 1, 80)
-        citations = [f"{c.file}:{c.line_range}"] if c else []
+        citations = [f"{c.file}:{c.line_range} (static)"] if c else []
         return {"ok": True, "result": summary, "citations": citations}
 
     # ---- LangGraph loop ----
@@ -358,4 +407,3 @@ class Navigator:
         }
         out = app.invoke(state)
         return str(out.get("final") or "(no answer)")
-
