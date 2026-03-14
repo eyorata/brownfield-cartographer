@@ -1,8 +1,14 @@
 llm:
   # LM Studio exposes an OpenAI-compatible server. Typical default:
   #   http://localhost:1234/v1
+  # You can also set these via env (recommended for secrets):
+  #   LMSTUDIO_API_BASE=http://192.168.6.233:1234/v1
+  #   LMSTUDIO_API_KEY_ENV=LMSTUDIO_API_KEY
+  #   export/set LMSTUDIO_API_KEY=... (actual secret value)
   base_url: "http://localhost:1234/v1"
-  api_key: "lm-studio"
+  base_url_env: "LMSTUDIO_API_BASE"
+  api_key: ""
+  api_key_env: "LMSTUDIO_API_KEY"
   # Set this to the exact model name shown in LM Studio (Model tab / server logs).
   model: "local-model"
   # Cost-conscious model selection:
@@ -12,6 +18,8 @@ llm:
   expensive_model: "local-model"
   # Embeddings model for the semantic index (POST /embeddings). Can differ from chat models.
   embedding_model: "local-model"
+  # Optional vision model (if your server supports it):
+  vision_model: "qwen3-vl-32b-instruct"
   temperature: 0.2
   max_tokens: 900
   timeout_s: 90

@@ -267,9 +267,10 @@ class Semanticist:
         output_dir = output_dir or (repo_root / ".cartography")
 
         llm_client = OpenAICompatClient(
-            base_url=config.llm.base_url,
-            api_key=config.llm.api_key,
+            base_url=config.llm.resolved_base_url(),
+            api_key=config.llm.resolved_api_key(),
             timeout_s=config.llm.timeout_s,
+            extra_headers=config.llm.extra_headers(),
         )
         if not llm_client.is_available(timeout_s=3):
             llm_client = None
@@ -411,7 +412,7 @@ class Semanticist:
                         )
                         count += 1
 
-                embedding_model = config.llm.embedding_model or (config.llm.cheap_model or config.llm.model)
+                embedding_model = config.llm.resolved_embedding_model()
 
                 def _embed(docs_in: List[Dict[str, str]]) -> SemanticIndex:
                     texts = [str(d.get("text") or "") for d in docs_in]
@@ -735,9 +736,10 @@ class Semanticist:
         """
         config = config or CartographyConfig()
         llm_client = OpenAICompatClient(
-            base_url=config.llm.base_url,
-            api_key=config.llm.api_key,
+            base_url=config.llm.resolved_base_url(),
+            api_key=config.llm.resolved_api_key(),
             timeout_s=config.llm.timeout_s,
+            extra_headers=config.llm.extra_headers(),
         )
         if not llm_client.is_available(timeout_s=3):
             self.kg.module_graph.graph["day_one_answers"] = {

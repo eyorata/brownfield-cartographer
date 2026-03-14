@@ -21,17 +21,24 @@ class OpenAICompatClient:
     Designed to work with LM Studio local server (OpenAI API compatible).
     """
 
-    def __init__(self, base_url: str, api_key: str, timeout_s: int = 90):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        timeout_s: int = 90,
+        extra_headers: Optional[Dict[str, str]] = None,
+    ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout_s = int(timeout_s)
+        self.extra_headers = dict(extra_headers or {})
 
     def get_models(self, timeout_s: int = 3) -> Dict[str, Any]:
         """
         Best-effort check used to detect whether a local OpenAI-compatible server is running.
         """
         url = f"{self.base_url}/models"
-        headers = {}
+        headers = dict(self.extra_headers)
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         req = Request(url=url, headers=headers, method="GET")
@@ -70,6 +77,7 @@ class OpenAICompatClient:
         headers = {
             "Content-Type": "application/json",
         }
+        headers.update(self.extra_headers)
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
@@ -112,6 +120,7 @@ class OpenAICompatClient:
         headers = {
             "Content-Type": "application/json",
         }
+        headers.update(self.extra_headers)
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 

@@ -60,9 +60,10 @@ class Navigator:
         self.config = config or CartographyConfig()
         self.hydrologist = Hydrologist(self.kg)
         self._llm = OpenAICompatClient(
-            base_url=self.config.llm.base_url,
-            api_key=self.config.llm.api_key,
+            base_url=self.config.llm.resolved_base_url(),
+            api_key=self.config.llm.resolved_api_key(),
             timeout_s=self.config.llm.timeout_s,
+            extra_headers=self.config.llm.extra_headers(),
         )
         self.semantic_index: SemanticIndex | None = None
         try:
@@ -88,6 +89,24 @@ class Navigator:
 
     def blast_radius(self, dataset_or_node: str, limit: int = 200) -> List[Dict[str, Any]]:
         return self.hydrologist.blast_radius(dataset_or_node)[:limit]
+
+    def module_blast_radius(self, module_path: str, limit: int = 200) -> List[Dict[str, Any]]:
+        """
+        "What breaks if I change X?" for code modules (module import graph).
+        Returns downstream modules reachable from module_path.
+        """
+        g = self.kg.module_graph
+        if module_path not in g:
+            return []
+
+        impacted: List[Dict[str, Any]] = []
+        for target in sorted(nx.descendants(g, module_path))[: max(1, int(limit))]:
+            try:
+                path = nx.shortest_path(g, module_path, target)
+            except Exception:
+                path = [module_path, target]
+            impacted.append({"node": str(target), "path": [str(x) for x in path], "graph": "module"})
+        return impacted
 
     def trace_lineage(
         self,
@@ -269,6 +288,25 @@ class Navigator:
                 out.append(c)
         return out
 
+    def _module_edge_citations_for_path(self, path: List[str]) -> List[str]:
+        cites: List[str] = []
+        g = self.kg.module_graph
+        for i in range(len(path) - 1):
+            u = path[i]
+            v = path[i + 1]
+            data = g.get_edge_data(u, v) or {}
+            sf = str(data.get("source_file") or "")
+            lr = str(data.get("line_range") or "")
+            if sf and lr:
+                cites.append(f"{sf}:{lr} (static)")
+        out: List[str] = []
+        seen = set()
+        for c in cites:
+            if c not in seen:
+                seen.add(c)
+                out.append(c)
+        return out
+
     def trace_lineage_tool(self, node: str, direction: str = "up", max_depth: int = 6) -> ToolResult:
         paths = self.trace_lineage(node=node, direction=direction, max_depth=max_depth, max_paths=10)
         out = []
@@ -279,12 +317,23 @@ class Navigator:
         return {"ok": True, "result": out, "citations": citations[:30]}
 
     def blast_radius_tool(self, node: str) -> ToolResult:
-        impacted = self.hydrologist.blast_radius(node)[:100]
+        # Prefer module-graph blast radius when the node looks like a module path.
+        impacted: List[Dict[str, Any]] = []
+        if node in self.kg.module_graph:
+            impacted = self.module_blast_radius(node, limit=100)[:100]
+        elif node in self.kg.lineage_graph:
+            impacted = self.hydrologist.blast_radius(node)[:100]
+        else:
+            impacted = self.hydrologist.blast_radius(node)[:100]
+
         citations: List[str] = []
         for it in impacted[:30]:
             p = it.get("path") or []
             if isinstance(p, list):
-                citations.extend(self._edge_citations_for_path([str(x) for x in p]))
+                if it.get("graph") == "module":
+                    citations.extend(self._module_edge_citations_for_path([str(x) for x in p]))
+                else:
+                    citations.extend(self._edge_citations_for_path([str(x) for x in p]))
         return {"ok": True, "result": impacted, "citations": citations[:40]}
 
     def explain_module(self, module_path: str) -> ToolResult:
@@ -292,7 +341,7 @@ class Navigator:
         if not info.get("found"):
             return {"ok": False, "result": "module not found", "citations": []}
         attrs = info.get("attrs") or {}
-        summary = {
+        summary: Dict[str, Any] = {
             "module": module_path,
             "purpose_statement": attrs.get("purpose_statement"),
             "domain_cluster": attrs.get("domain_cluster"),
@@ -304,8 +353,43 @@ class Navigator:
             "imports_out_count": len(info.get("imports_out") or []),
             "imports_in_count": len(info.get("imports_in") or []),
         }
-        c = self._read_file_snippet(module_path, 1, 80)
+        c = self._read_file_snippet(module_path, 1, 140)
         citations = [f"{c.file}:{c.line_range} (static)"] if c else []
+
+        # Optional generative explanation grounded in code excerpt.
+        explanation = ""
+        if self.repo_root is not None and c is not None:
+            try:
+                if self._llm.is_available(timeout_s=2):
+                    sys_msg = (
+                        "You explain code modules for onboarding.\n"
+                        "Use ONLY the provided excerpt and graph stats.\n"
+                        "Do not fabricate filenames or line numbers.\n"
+                        "Keep it under 10 sentences."
+                    )
+                    user_msg = (
+                        f"MODULE: {module_path}\n"
+                        f"STATS: pagerank={summary.get('pagerank')}, imports_in={summary.get('imports_in_count')}, imports_out={summary.get('imports_out_count')}\n"
+                        f"EXCERPT ({c.file}:{c.line_range}):\n{c.snippet}\n"
+                    )
+                    model = self.config.llm.cheap_model or self.config.llm.model
+                    explanation = self._llm.chat_completions(
+                        model=model,
+                        messages=[ChatMessage(role="system", content=sys_msg), ChatMessage(role="user", content=user_msg)],
+                        temperature=min(0.4, float(self.config.llm.temperature)),
+                        max_tokens=min(450, int(self.config.llm.max_tokens)),
+                    ).strip()
+                    summary["analysis_method"] = "llm"
+                else:
+                    summary["analysis_method"] = "static"
+            except Exception:
+                summary["analysis_method"] = "static"
+        else:
+            summary["analysis_method"] = "static"
+
+        if explanation:
+            summary["explanation"] = explanation
+
         return {"ok": True, "result": summary, "citations": citations}
 
     # ---- LangGraph loop ----
@@ -331,7 +415,7 @@ class Navigator:
             "Tools:\n"
             "- find_implementation(query: string)\n"
             "- trace_lineage(node: string, direction: 'up'|'down', max_depth: int)\n"
-            "- blast_radius(node: string)\n"
+            "- blast_radius(node: string)  # node can be a dataset OR a module path\n"
             "- explain_module(module_path: string)\n\n"
             "JSON schema:\n"
             "{type:'tool', name:'find_implementation'|'trace_lineage'|'blast_radius'|'explain_module', args:{...}}\n"

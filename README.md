@@ -25,6 +25,15 @@ You can also pass a GitHub URL (the CLI will shallow-clone it under `.cartograph
 ./.venv/Scripts/python.exe src/cli.py analyze https://github.com/dbt-labs/dbt-core
 ```
 
+### Using paid LLM gateways (OpenRouter, etc.)
+This tool speaks to any OpenAI-compatible API.
+
+- Set `llm.base_url` to your provider’s base URL (e.g. OpenRouter: `https://openrouter.ai/api/v1`)
+- Provide the API key either directly in `cartography_config.yaml` (`llm.api_key`) or via an env var:
+  - `llm.api_key_env: "OPENROUTER_API_KEY"` and set `OPENROUTER_API_KEY=...`
+- (Optional) OpenRouter attribution headers:
+  - `llm.app_url` and `llm.app_name`
+
 This runs the four-phase pipeline (Surveyor, Hydrologist, Semanticist, Archivist) and generates output artifacts in the *target repo's* `.cartography/` directory, including:
 - `module_graph.json`: The layout and structure.
 - `lineage_graph.json`: Data flow tracking.
