@@ -18,6 +18,8 @@ venv.bak/
 !.cartography/onboarding_brief.md
 !.cartography/cartography_trace.jsonl
 !.cartography/semantic_index.json
+!.cartography/ui_runs/
+!.cartography/ui_runs/**
 _targets/
 _tmp/
 artifacts/

@@ -1,0 +1,8 @@
+C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\.venv\Scripts\python.exe -u C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\src\cli.py analyze .\targets\Roo-Code --output-dir C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\.cartography\ui_runs\0e582e98e5df
+
+Running analysis on: targets\Roo-Code
+Starting orchestration for: C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\targets\Roo-Code
+Surveyor analyzing structure of C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\targets\Roo-Code
+Failed to get git velocity: [WinError 267] The directory name is invalid
+Hydrologist analyzing data lineage of C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\targets\Roo-Code
+Orchestration complete. Artifacts saved in: C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\targets\Roo-Code\.cartography and C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\.cartography\ui_runs\0e582e98e5df

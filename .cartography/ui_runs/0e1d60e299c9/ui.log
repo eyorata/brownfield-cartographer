@@ -1,0 +1,34 @@
+C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\.venv\Scripts\python.exe -u C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\src\cli.py analyze .\_targets\Roo-Code --output-dir C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\.cartography\ui_runs\0e1d60e299c9
+
+Running analysis on: _targets\Roo-Code
+Starting orchestration for: C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\_targets\Roo-Code
+Surveyor analyzing structure of C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\_targets\Roo-Code
+Found 10 circular dependencies.
+Hydrologist analyzing data lineage of C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\_targets\Roo-Code
+SQL parse failures (sqlglot): 1 samples (Jinja/templates are expected). Showing up to 5:
+- Expecting ). Line 2, Col: 64.
+  CREATE TABLE "runs" (
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY ([4msequence[0m name "runs_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
+	"task_metr
+CREATE TABLE "runs" (
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "runs_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
+	"task_metrics_id" integer,
+	"model" text NOT NULL,
+	"description" text,
+	"settings" jsonb,
+	"pid" integer,
+	"socket_path" text NOT NULL,
+	"concurrency" integer DEFAULT 2 NOT NULL,
+	"passed" integer DEFAULT 0 NOT NULL,
+	"failed" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "taskMetrics" (
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "taskMetrics_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
+	"tokens_in" integer NOT NULL,
+	"tokens_out" integer NOT NULL,
+	"tokens_context" integer NOT NULL,
+	"cache_writes" integer NOT NULL,
+
+Orchestration complete. Artifacts saved in: C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\_targets\Roo-Code\.cartography and C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\.cartography\ui_runs\0e1d60e299c9

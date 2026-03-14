@@ -1,0 +1,8 @@
+{"ts": "2026-03-12T20:19:37Z", "event": "start", "repo_root": "C:\\Users\\user\\Documents\\brownfield-cartographer\\brownfield-cartographer\\_targets\\dbt-core", "phases": ["surveyor", "hydrologist", "semanticist", "archivist"]}
+{"ts": "2026-03-12T20:19:37Z", "event": "phase_start", "phase": "surveyor"}
+{"ts": "2026-03-12T20:19:48Z", "event": "phase_end", "phase": "surveyor"}
+{"ts": "2026-03-12T20:19:48Z", "event": "phase_start", "phase": "hydrologist"}
+{"ts": "2026-03-12T20:19:58Z", "event": "phase_end", "phase": "hydrologist"}
+{"ts": "2026-03-12T20:19:58Z", "event": "phase_start", "phase": "semanticist"}
+{"ts": "2026-03-12T20:34:50Z", "event": "phase_end", "phase": "semanticist"}
+{"ts": "2026-03-12T20:34:51Z", "event": "phase_start", "phase": "archivist"}

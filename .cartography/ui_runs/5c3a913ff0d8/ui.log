@@ -1,0 +1,144 @@
+C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\.venv\Scripts\python.exe C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\src\cli.py analyze .\_targets\dbt-core --output-dir C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\.cartography\ui_runs\5c3a913ff0d8
+
+C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\_targets\dbt-core\tests\unit\context\test_query_header.py:48: SyntaxWarning: invalid escape sequence '\/'
+  assert re.match(f"^\/\*.*\*\/\n{query}$", sql)  # noqa: [W605]
+C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\_targets\dbt-core\tests\unit\context\test_query_header.py:48: SyntaxWarning: invalid escape sequence '\/'
+  assert re.match(f"^\/\*.*\*\/\n{query}$", sql)  # noqa: [W605]
+Running analysis on: _targets\dbt-core
+Starting orchestration for: C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\_targets\dbt-core
+Surveyor analyzing structure of C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\_targets\dbt-core
+Hydrologist analyzing data lineage of C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\_targets\dbt-core
+SQL parse failures (sqlglot): 25 samples (Jinja/templates are expected). Showing up to 5:
+- Invalid expression / Unexpected token. Line 12, Col: 4.
+  n dbt_project.yml
+
+    Try changing "table" to "view" below
+*/
+
+{{ config(materialized='table') }}
+
+[4mwith[0m source_data as (
+
+    select 1 as id
+    union all
+    select null as id
+
+)
+
+select *
+from source_d
+/*
+    Welcome to your first dbt model!
+    Did you know that you can also configure models directly within SQL files?
+    This will override configurations stated in dbt_project.yml
+
+    Try changing "table" to "view" below
+*/
+
+{{ config(materialized='table') }}
+
+with source_data as (
+
+    select 1 as id
+    union all
+    select null as id
+
+)
+
+select *
+from source_data
+
+- Expected table name but got <Token token_type: TokenType.L_BRACE, text: {, line: 5, col: 6, start: 70, end: 70, comments: []>. Line 5, Col: 6.
+  
+-- Use the `ref` function to select from other models
+
+select *
+from [4m{[0m{ ref('my_first_dbt_model') }}
+where id = 1
+
+-- Use the `ref` function to select from other models
+
+select *
+from {{ ref('my_first_dbt_model') }}
+where id = 1
+
+- Expected table name but got <Token token_type: TokenType.L_BRACE, text: {, line: 1, col: 14, start: 13, end: 13, comments: []>. Line 1, Col: 14.
+  create table [4m{[0mschema}.seed (
+	id BIGSERIAL PRIMARY KEY,
+	first_name VARCHAR(50),
+	last_name VARCHAR(50),
+	email VA
+create table {schema}.seed (
+	id BIGSERIAL PRIMARY KEY,
+	first_name VARCHAR(50),
+	last_name VARCHAR(50),
+	email VARCHAR(50),
+	"GenDEr" VARCHAR(10),
+	ip_address VARCHAR(20)
+);
+
+insert into {schema}.seed (first_name, last_name, email, "GenDEr", ip_address) values
+('Jack', 'Hunter', 'jhunter0@pbs.org', 'Male', '59.80.20.168'),
+('Kathryn', 'Walker', 'kwalker1@ezinearticles.com', 'Female', '194.121.179.35'),
+('Gerald', 'Ryan', 'gryan2@com.com', 'Male', '11.3.212.243'),
+('Bonnie', 'Spencer', 'bspencer3@ameblo.jp', 'Female', '216.32.196.175'),
+('Harold', 'Taylor', 'htaylor4@people.com.cn', 'Male', '253.10.246.136'),
+('Jacqueline', 'Griffin', 'jgriffin5@t.co', 'Female', '16.13.192.220'),
+('Wanda', 'Arnold', 'warnold6@google.nl', 'Female', '232.116.150.64'),
+('Craig', 'Ortiz', 'cortiz7@sciencedaily.com', 'Male', '199.126.106.13'),
+('Gary', 'Day', 'gday8@nih.gov', 'Male', '35.81.68.186'),
+('Rose', 'Wright', 'rwright9@yahoo.co.jp', 'Female', '236.82.178.100'),
+
+- Expected table name but got <Token token_type: TokenType.L_BRACE, text: {, line: 1, col: 13, start: 12, end: 12, comments: []>. Line 1, Col: 13.
+  ALTER TABLE [4m{[0mschema}.seed ALTER COLUMN "GenDEr" TYPE varchar(300);
+
+insert into {schema}.seed (first_name, last_n
+ALTER TABLE {schema}.seed ALTER COLUMN "GenDEr" TYPE varchar(300);
+
+insert into {schema}.seed (first_name, last_name, email, "GenDEr", ip_address) values
+('Annie', 'Reynolds', 'areynolds0@nifty.com', 'Amerisource Bergen', '133.30.242.211'),
+('Doris', 'Wood', 'dwood1@skyrock.com', 'Bliss World, LLC', '128.229.89.207'),
+('Andrea', 'Ray', 'aray2@google.co.jp', 'Nelco Laboratories, Inc.', '109.74.153.45'),
+('Frank', 'Morgan', 'fmorgan3@1688.com', 'ALK-Abello, Inc.', '252.211.209.9'),
+('Angela', 'Stanley', 'astanley4@google.fr', 'Gemini Pharmaceuticals, Inc. dba ONDRA Pharmaceuticals', '134.142.194.184'),
+('Ruby', 'Jordan', 'rjordan5@nymag.com', 'Watson Pharma, Inc.', '195.104.60.172'),
+('Kathleen', 'Ryan', 'kryan6@scientificamerican.com', 'SHISEIDO AMERICAS CORPORATION', '209.110.160.192'),
+('Margaret', 'Jacobs', 'mjacobs7@example.com', 'Cardinal Health', '72.36.52.20'),
+('Ernest', 'Brown', 'ebrown8@360.cn', 'West-ward Pharmaceutical Corp', '138.157.61.255'),
+('Elizabeth', 'Phillips', 'ephillips9@japanpost.jp', 'Cellex-C International Inc', '68.46.195.188'),
+('Annie', 'Ellis', 'aellisa@weather.com', 'NATURE REPUBLIC CO., LTD.', '163.128.214.142'),
+('Melissa', 'Olson', 'molsonb@theguardian.com', 'Nelco Laboratories, Inc.', '202.22.153.188'),
+('Timothy', 'Martinez', 'tmartinezc@zimbio.com', 'Lake Erie Medical & Surgical Supply DBA Quality Care Products LLC', '45.64.205.47'),
+('Mark', 'Nelson', 'mnelsond@bloomberg.com', '7-Eleven', '91.99.195.160'),
+('Kenneth', 'Hart', 'kharte@berkeley.edu', 'Preferred Pharmaceuticals, Inc.', '207.240.9.102'),
+('Kathryn', 'White', 'kwhitef@csmonitor.com', 'Cantrell Drug Company', '191.178.162.18'),
+('Mary', 'Greene', 'mgreeneg@usnews.com', 'Neutrogena Corporation', '251.226.65.64'),
+
+- Expected table name but got <Token token_type: TokenType.L_BRACE, text: {, line: 1, col: 14, start: 13, end: 13, comments: []>. Line 1, Col: 14.
+  create table [4m{[0mschema}.seed (
+    favorite_color VARCHAR(10),
+	id INTEGER,
+	first_name VARCHAR(11),
+	email VARCHAR(
+create table {schema}.seed (
+    favorite_color VARCHAR(10),
+	id INTEGER,
+	first_name VARCHAR(11),
+	email VARCHAR(31),
+	ip_address VARCHAR(15),
+	updated_at TIMESTAMP WITHOUT TIME ZONE
+);
+
+
+INSERT INTO {schema}.seed
+    (favorite_color, id, first_name, email, ip_address, updated_at)
+VALUES
+    ('blue', 1,'Larry','lking0@miitbeian.gov.cn','69.135.206.194','2008-09-12 19:08:31'),
+    ('blue', 2,'Larry','lperkins1@toplist.cz','64.210.133.162','1978-05-09 04:15:14'),
+    ('blue', 3,'Anna','amontgomery2@miitbeian.gov.cn','168.104.64.114','2011-10-16 04:07:57'),
+    ('blue', 4,'Sandra','sgeorge3@livejournal.com','229.235.252.98','1973-07-19 10:52:43'),
+    ('blue', 5,'Fred','fwoods4@google.cn','78.229.170.124','2012-09-30 16:38:29'),
+    ('blue', 6,'Stephen','shanson5@livejournal.com','182.227.157.105','1995-11-07 21:40:50'),
+    ('blue', 7,'William','wmartinez6@upenn.edu','135.139.249.50','1982-09-05 03:11:59'),
+
+Orchestration complete. Artifacts saved in: C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\_targets\dbt-core\.cartography and C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\.cartography\ui_runs\5c3a913ff0d8

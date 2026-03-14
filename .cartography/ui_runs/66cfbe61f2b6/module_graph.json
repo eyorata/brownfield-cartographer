@@ -1,0 +1,268 @@
+{
+  "directed": true,
+  "multigraph": false,
+  "graph": {
+    "top_velocity_files_30d": [
+      {
+        "path": ".changeset/README.md",
+        "touches": 1
+      },
+      {
+        "path": ".changeset/changelog-config.js",
+        "touches": 1
+      },
+      {
+        "path": ".changeset/config.json",
+        "touches": 1
+      },
+      {
+        "path": ".dockerignore",
+        "touches": 1
+      },
+      {
+        "path": ".env.sample",
+        "touches": 1
+      },
+      {
+        "path": ".git-blame-ignore-revs",
+        "touches": 1
+      },
+      {
+        "path": ".gitattributes",
+        "touches": 1
+      },
+      {
+        "path": ".gitconfig",
+        "touches": 1
+      },
+      {
+        "path": ".github/CODEOWNERS",
+        "touches": 1
+      },
+      {
+        "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
+        "touches": 1
+      }
+    ],
+    "llm_usage": {
+      "max_total_tokens": 200000,
+      "used_tokens": 0,
+      "calls": [],
+      "skipped": 0
+    },
+    "day_one_answers": {
+      "error": "LLM unavailable for day-one answers. Start LM Studio server and re-run semanticist."
+    }
+  },
+  "nodes": [
+    {
+      "path": "ellipsis.yaml",
+      "language": "yaml",
+      "change_velocity_30d": 1,
+      "is_dead_code_candidate": false,
+      "last_modified": "1773250111",
+      "public_symbol_count": 0,
+      "pagerank": 0.07692307692307693,
+      "import_in_degree": 0,
+      "import_out_degree": 0,
+      "domain_cluster": "version-specifier",
+      "domain_cluster_method": "embedding",
+      "purpose_statement": "ellipsis.yaml is a YAML configuration file.",
+      "purpose_method": "heuristic",
+      "id": "ellipsis.yaml"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "language": "yaml",
+      "change_velocity_30d": 1,
+      "is_dead_code_candidate": false,
+      "last_modified": "1773250112",
+      "public_symbol_count": 0,
+      "pagerank": 0.07692307692307693,
+      "import_in_degree": 0,
+      "import_out_degree": 0,
+      "domain_cluster": "version-specifier",
+      "domain_cluster_method": "embedding",
+      "purpose_statement": "pnpm-lock.yaml is a YAML configuration file.",
+      "purpose_method": "heuristic",
+      "id": "pnpm-lock.yaml"
+    },
+    {
+      "path": "pnpm-workspace.yaml",
+      "language": "yaml",
+      "change_velocity_30d": 1,
+      "is_dead_code_candidate": false,
+      "last_modified": "1773250112",
+      "public_symbol_count": 0,
+      "pagerank": 0.07692307692307693,
+      "import_in_degree": 0,
+      "import_out_degree": 0,
+      "domain_cluster": "table-null",
+      "domain_cluster_method": "embedding",
+      "purpose_statement": "pnpm-workspace.yaml is a YAML configuration file.",
+      "purpose_method": "heuristic",
+      "id": "pnpm-workspace.yaml"
+    },
+    {
+      "path": "packages/evals/docker-compose.override.yml",
+      "language": "yaml",
+      "change_velocity_30d": 1,
+      "is_dead_code_candidate": false,
+      "last_modified": "1773250112",
+      "public_symbol_count": 0,
+      "pagerank": 0.07692307692307693,
+      "import_in_degree": 0,
+      "import_out_degree": 0,
+      "domain_cluster": "version-specifier",
+      "domain_cluster_method": "embedding",
+      "purpose_statement": "packages/evals/docker-compose.override.yml is a YAML configuration file.",
+      "purpose_method": "heuristic",
+      "id": "packages/evals/docker-compose.override.yml"
+    },
+    {
+      "path": "packages/evals/docker-compose.yml",
+      "language": "yaml",
+      "change_velocity_30d": 1,
+      "is_dead_code_candidate": false,
+      "last_modified": "1773250112",
+      "public_symbol_count": 0,
+      "pagerank": 0.07692307692307693,
+      "import_in_degree": 0,
+      "import_out_degree": 0,
+      "domain_cluster": "version-specifier",
+      "domain_cluster_method": "embedding",
+      "purpose_statement": "packages/evals/docker-compose.yml is a YAML configuration file.",
+      "purpose_method": "heuristic",
+      "id": "packages/evals/docker-compose.yml"
+    },
+    {
+      "path": "packages/evals/src/db/migrations/0000_young_trauma.sql",
+      "language": "sql",
+      "change_velocity_30d": 1,
+      "is_dead_code_candidate": false,
+      "last_modified": "1773250112",
+      "public_symbol_count": 0,
+      "pagerank": 0.07692307692307693,
+      "import_in_degree": 0,
+      "import_out_degree": 0,
+      "domain_cluster": "table-null",
+      "domain_cluster_method": "embedding",
+      "purpose_statement": "packages/evals/src/db/migrations/0000_young_trauma.sql is a SQL file.",
+      "purpose_method": "heuristic",
+      "id": "packages/evals/src/db/migrations/0000_young_trauma.sql"
+    },
+    {
+      "path": "packages/evals/src/db/migrations/0001_add_timeout_to_runs.sql",
+      "language": "sql",
+      "change_velocity_30d": 1,
+      "is_dead_code_candidate": false,
+      "last_modified": "1773250112",
+      "public_symbol_count": 0,
+      "pagerank": 0.07692307692307693,
+      "import_in_degree": 0,
+      "import_out_degree": 0,
+      "domain_cluster": "table-null",
+      "domain_cluster_method": "embedding",
+      "purpose_statement": "packages/evals/src/db/migrations/0001_add_timeout_to_runs.sql is a SQL file.",
+      "purpose_method": "heuristic",
+      "id": "packages/evals/src/db/migrations/0001_add_timeout_to_runs.sql"
+    },
+    {
+      "path": "packages/evals/src/db/migrations/0001_lowly_captain_flint.sql",
+      "language": "sql",
+      "change_velocity_30d": 1,
+      "is_dead_code_candidate": false,
+      "last_modified": "1773250112",
+      "public_symbol_count": 0,
+      "pagerank": 0.07692307692307693,
+      "import_in_degree": 0,
+      "import_out_degree": 0,
+      "domain_cluster": "table-null",
+      "domain_cluster_method": "embedding",
+      "purpose_statement": "packages/evals/src/db/migrations/0001_lowly_captain_flint.sql is a SQL file.",
+      "purpose_method": "heuristic",
+      "id": "packages/evals/src/db/migrations/0001_lowly_captain_flint.sql"
+    },
+    {
+      "path": "packages/evals/src/db/migrations/0002_bouncy_blazing_skull.sql",
+      "language": "sql",
+      "change_velocity_30d": 1,
+      "is_dead_code_candidate": false,
+      "last_modified": "1773250112",
+      "public_symbol_count": 0,
+      "pagerank": 0.07692307692307693,
+      "import_in_degree": 0,
+      "import_out_degree": 0,
+      "domain_cluster": "table-null",
+      "domain_cluster_method": "embedding",
+      "purpose_statement": "packages/evals/src/db/migrations/0002_bouncy_blazing_skull.sql is a SQL file.",
+      "purpose_method": "heuristic",
+      "id": "packages/evals/src/db/migrations/0002_bouncy_blazing_skull.sql"
+    },
+    {
+      "path": "packages/evals/src/db/migrations/0003_simple_retro_girl.sql",
+      "language": "sql",
+      "change_velocity_30d": 1,
+      "is_dead_code_candidate": false,
+      "last_modified": "1773250112",
+      "public_symbol_count": 0,
+      "pagerank": 0.07692307692307693,
+      "import_in_degree": 0,
+      "import_out_degree": 0,
+      "domain_cluster": "packages-evals",
+      "domain_cluster_method": "embedding",
+      "purpose_statement": "packages/evals/src/db/migrations/0003_simple_retro_girl.sql is a SQL file.",
+      "purpose_method": "heuristic",
+      "id": "packages/evals/src/db/migrations/0003_simple_retro_girl.sql"
+    },
+    {
+      "path": "packages/evals/src/db/migrations/0004_sloppy_black_knight.sql",
+      "language": "sql",
+      "change_velocity_30d": 1,
+      "is_dead_code_candidate": false,
+      "last_modified": "1773250112",
+      "public_symbol_count": 0,
+      "pagerank": 0.07692307692307693,
+      "import_in_degree": 0,
+      "import_out_degree": 0,
+      "domain_cluster": "table-null",
+      "domain_cluster_method": "embedding",
+      "purpose_statement": "packages/evals/src/db/migrations/0004_sloppy_black_knight.sql is a SQL file.",
+      "purpose_method": "heuristic",
+      "id": "packages/evals/src/db/migrations/0004_sloppy_black_knight.sql"
+    },
+    {
+      "path": "packages/evals/src/db/migrations/0005_strong_skrulls.sql",
+      "language": "sql",
+      "change_velocity_30d": 1,
+      "is_dead_code_candidate": false,
+      "last_modified": "1773250112",
+      "public_symbol_count": 0,
+      "pagerank": 0.07692307692307693,
+      "import_in_degree": 0,
+      "import_out_degree": 0,
+      "domain_cluster": "table-null",
+      "domain_cluster_method": "embedding",
+      "purpose_statement": "packages/evals/src/db/migrations/0005_strong_skrulls.sql is a SQL file.",
+      "purpose_method": "heuristic",
+      "id": "packages/evals/src/db/migrations/0005_strong_skrulls.sql"
+    },
+    {
+      "path": "packages/evals/src/db/migrations/0006_worried_spectrum.sql",
+      "language": "sql",
+      "change_velocity_30d": 1,
+      "is_dead_code_candidate": false,
+      "last_modified": "1773250112",
+      "public_symbol_count": 0,
+      "pagerank": 0.07692307692307693,
+      "import_in_degree": 0,
+      "import_out_degree": 0,
+      "domain_cluster": "packages-evals",
+      "domain_cluster_method": "embedding",
+      "purpose_statement": "packages/evals/src/db/migrations/0006_worried_spectrum.sql is a SQL file.",
+      "purpose_method": "heuristic",
+      "id": "packages/evals/src/db/migrations/0006_worried_spectrum.sql"
+    }
+  ],
+  "edges": []
+}

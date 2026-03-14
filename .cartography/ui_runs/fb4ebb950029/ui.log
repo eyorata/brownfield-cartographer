@@ -1,0 +1,73 @@
+C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\.venv\Scripts\python.exe -u C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\src\cli.py analyze .\_targets\Roo-Code --output-dir C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\.cartography\ui_runs\fb4ebb950029
+
+Running analysis on: _targets\Roo-Code
+Starting orchestration for: C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\_targets\Roo-Code
+Surveyor analyzing structure of C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\_targets\Roo-Code
+Found 11 circular dependencies.
+Hydrologist analyzing data lineage of C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\_targets\Roo-Code
+SQL parse failures (sqlglot): 1 samples (Jinja/templates are expected). Showing up to 5:
+- Expecting ). Line 2, Col: 64.
+  CREATE TABLE "runs" (
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY ([4msequence[0m name "runs_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
+	"task_metr
+CREATE TABLE "runs" (
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "runs_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
+	"task_metrics_id" integer,
+	"model" text NOT NULL,
+	"description" text,
+	"settings" jsonb,
+	"pid" integer,
+	"socket_path" text NOT NULL,
+	"concurrency" integer DEFAULT 2 NOT NULL,
+	"passed" integer DEFAULT 0 NOT NULL,
+	"failed" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "taskMetrics" (
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "taskMetrics_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
+	"tokens_in" integer NOT NULL,
+	"tokens_out" integer NOT NULL,
+	"tokens_context" integer NOT NULL,
+	"cache_writes" integer NOT NULL,
+
+Traceback (most recent call last):
+  File "C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\src\llm\openai_compat.py", line 88, in chat_completions
+    with urlopen(req, timeout=self.timeout_s) as resp:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\urllib\request.py", line 215, in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\urllib\request.py", line 521, in open
+    response = meth(req, response)
+               ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\urllib\request.py", line 630, in http_response
+    response = self.parent.error(
+               ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\urllib\request.py", line 559, in error
+    return self._call_chain(*args)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\urllib\request.py", line 492, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\urllib\request.py", line 639, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 400: Bad Request
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\src\cli.py", line 298, in <module>
+    main()
+  File "C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\src\cli.py", line 149, in main
+    orchestrator.run_analysis(repo_path, output_dir=args.output_dir, config=cfg, incremental=bool(args.incremental))
+  File "C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\src\orchestrator.py", line 149, in run_analysis
+    self.semanticist.run(repo_root, config=config, trace=trace, output_dir=target_out, only_files=changed_files)
+  File "C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\src\agents\semanticist.py", line 861, in run
+    self.annotate_modules(
+  File "C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\src\agents\semanticist.py", line 671, in annotate_modules
+    out = llm_client.chat_completions(
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer\src\llm\openai_compat.py", line 96, in chat_completions
+    time.sleep(0.4 * (attempt + 1))
+KeyboardInterrupt
