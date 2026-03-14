@@ -837,7 +837,24 @@ class Semanticist:
 
             parsed = _json.loads(out)
             if isinstance(parsed, dict):
-                self.kg.module_graph.graph["day_one_answers"] = parsed
+                # Fill weak/empty answers with deterministic fallback evidence.
+                fallback = self._day_one_fallback(repo_root)
+                merged: Dict[str, Any] = {}
+                for k, v in fallback.items():
+                    merged[k] = v
+                for k, v in parsed.items():
+                    if not isinstance(v, dict):
+                        continue
+                    ans = str(v.get("answer") or "").strip().lower()
+                    cites = v.get("citations") if isinstance(v.get("citations"), list) else []
+                    weak = (not ans) or ("not detected" in ans) or ("requires manual" in ans)
+                    if weak:
+                        continue
+                    # Keep LLM answer but ensure citations exist; fall back otherwise.
+                    if not cites:
+                        continue
+                    merged[k] = v
+                self.kg.module_graph.graph["day_one_answers"] = merged
                 if trace is not None:
                     trace.append(
                         {
@@ -946,7 +963,23 @@ class Semanticist:
             "citations": (ingestion_cites or [c for ds in sources[:3] for c in _dataset_citations(ds)] or mod_cites[:4]),
         }
 
+        # If sinks are empty, fall back to top targets from transformation nodes.
         q2_sinks = sinks[:5]
+        if not q2_sinks:
+            try:
+                for n, a in self.kg.lineage_graph.nodes(data=True):
+                    # Transformation nodes carry source_datasets/target_datasets fields.
+                    targets = a.get("target_datasets") or []
+                    if targets:
+                        for t in targets:
+                            if t not in q2_sinks:
+                                q2_sinks.append(str(t))
+                            if len(q2_sinks) >= 5:
+                                break
+                    if len(q2_sinks) >= 5:
+                        break
+            except Exception:
+                pass
         q2 = {
             "answer": f"Critical outputs (top sinks): {', '.join([str(x) for x in q2_sinks])}" if q2_sinks else "Critical outputs not detected; see lineage sources.",
             "citations": [c for ds in q2_sinks for c in _dataset_citations(ds)] or [c for ds in sources[:3] for c in _dataset_citations(ds)],
