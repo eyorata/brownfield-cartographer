@@ -15,6 +15,8 @@ class LLMConfig(BaseModel):
     # Cost-conscious selection: cheap model for bulk, expensive model for synthesis.
     cheap_model: str = Field(default="local-model")
     expensive_model: str = Field(default="local-model")
+    # Embeddings model for semantic index / vector search (can differ from chat models).
+    embedding_model: str = Field(default="local-model")
     max_total_tokens: int = Field(default=200_000, ge=1, le=10_000_000)
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     max_tokens: int = Field(default=900, ge=1, le=8192)
@@ -31,6 +33,10 @@ class SemanticistConfig(BaseModel):
     semantic_index: bool = True
     # Max modules to embed for the index/clustering.
     max_semantic_index_modules: int = Field(default=2500, ge=10, le=50_000)
+    # Include per-function and per-class entries in the semantic index (Python only).
+    semantic_index_symbols: bool = True
+    # Cap symbols per module to keep index size reasonable.
+    max_symbols_per_module: int = Field(default=250, ge=10, le=10_000)
 
 
 class NavigatorConfig(BaseModel):

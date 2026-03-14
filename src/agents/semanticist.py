@@ -15,7 +15,7 @@ if str(_SRC_DIR) not in sys.path:
 from config import CartographyConfig
 from graph.knowledge_graph import KnowledgeGraph
 from llm import ChatMessage, OpenAICompatClient
-from graph.semantic_index import SemanticIndex, embed_texts
+from graph.semantic_index import SemanticIndex, SemanticIndexEntry, embed_texts
 
 
 @dataclass(frozen=True)
@@ -311,19 +311,140 @@ class Semanticist:
             try:
                 index_path = output_dir / "semantic_index.json"
                 existing = SemanticIndex.load(index_path)
+
+                # Build docs: module entries + (optional) function/class entries.
+                docs: List[Dict[str, str]] = []
+
+                def _read_snippet(rel_path: str, lr: str, max_lines: int = 90) -> str:
+                    fp = (repo_root / rel_path).resolve()
+                    if not fp.exists():
+                        return ""
+                    try:
+                        lines = fp.read_text(encoding="utf-8", errors="ignore").splitlines()
+                    except Exception:
+                        return ""
+                    try:
+                        a, b = [int(x) for x in (lr or "1-1").split("-", 1)]
+                    except Exception:
+                        a, b = 1, min(len(lines), 80)
+                    a = max(1, a)
+                    b = max(a, b)
+                    b = min(b, len(lines))
+                    b = min(b, a + max_lines - 1)
+                    chunk = lines[a - 1 : b]
+                    return "\n".join([f"{i+a:4d}: {ln}" for i, ln in enumerate(chunk)])
+
+                for rel, text in module_texts:
+                    docs.append(
+                        {
+                            "id": SemanticIndex.make_entry_id(kind="module", module_path=rel),
+                            "kind": "module",
+                            "module_path": rel,
+                            "symbol_name": "",
+                            "line_range": "1-1",
+                            "text": text,
+                        }
+                    )
+
+                    if not config.semanticist.semantic_index_symbols:
+                        continue
+                    node_attrs = dict(self.kg.module_graph.nodes.get(rel, {}))
+                    if str(node_attrs.get("language") or "") != "python":
+                        continue
+
+                    fdefs = node_attrs.get("function_defs") or []
+                    cdefs = node_attrs.get("class_defs") or []
+                    sym_limit = int(config.semanticist.max_symbols_per_module)
+
+                    count = 0
+                    for d in fdefs:
+                        if count >= sym_limit:
+                            break
+                        if not isinstance(d, dict) or not d.get("name"):
+                            continue
+                        name = str(d.get("name"))
+                        lr = str(d.get("line_range") or "1-1")
+                        sig = str(d.get("signature") or "")
+                        decos = d.get("decorators") if isinstance(d.get("decorators"), list) else []
+                        snippet = _read_snippet(rel, lr)
+                        docs.append(
+                            {
+                                "id": SemanticIndex.make_entry_id(
+                                    kind="function",
+                                    module_path=rel,
+                                    symbol_name=name,
+                                    line_range=lr,
+                                ),
+                                "kind": "function",
+                                "module_path": rel,
+                                "symbol_name": name,
+                                "line_range": lr,
+                                "text": f"FUNCTION {name}{sig} in {rel} @ {lr}\nDECORATORS: {decos}\nCODE:\n{snippet}",
+                            }
+                        )
+                        count += 1
+
+                    for d in cdefs:
+                        if count >= sym_limit:
+                            break
+                        if not isinstance(d, dict) or not d.get("name"):
+                            continue
+                        name = str(d.get("name"))
+                        lr = str(d.get("line_range") or "1-1")
+                        bases = str(d.get("bases") or "")
+                        decos = d.get("decorators") if isinstance(d.get("decorators"), list) else []
+                        snippet = _read_snippet(rel, lr)
+                        docs.append(
+                            {
+                                "id": SemanticIndex.make_entry_id(
+                                    kind="class",
+                                    module_path=rel,
+                                    symbol_name=name,
+                                    line_range=lr,
+                                ),
+                                "kind": "class",
+                                "module_path": rel,
+                                "symbol_name": name,
+                                "line_range": lr,
+                                "text": f"CLASS {name}{bases} in {rel} @ {lr}\nDECORATORS: {decos}\nCODE:\n{snippet}",
+                            }
+                        )
+                        count += 1
+
+                embedding_model = config.llm.embedding_model or (config.llm.cheap_model or config.llm.model)
+
+                def _embed(docs_in: List[Dict[str, str]]) -> SemanticIndex:
+                    texts = [str(d.get("text") or "") for d in docs_in]
+                    embs = embed_texts(texts, client=llm_client, model=embedding_model)
+                    entries: List[SemanticIndexEntry] = []
+                    for d, e in zip(docs_in, embs, strict=False):
+                        entries.append(
+                            SemanticIndexEntry(
+                                id=str(d.get("id") or ""),
+                                kind=str(d.get("kind") or "module"),
+                                module_path=str(d.get("module_path") or ""),
+                                symbol_name=str(d.get("symbol_name") or ""),
+                                line_range=str(d.get("line_range") or "1-1"),
+                                embedding=list(e),
+                                text=str(d.get("text") or ""),
+                            )
+                        )
+                    embed_kind = "embedding" if llm_client is not None else "hash_embedding"
+                    return SemanticIndex(entries=entries, embedding_kind=embed_kind, embedding_model=embedding_model)
+
                 if existing is not None and only_files_norm is not None:
-                    idx = existing.updated(
-                        module_texts=module_texts,
-                        all_module_paths=all_paths,
-                        client=llm_client,
+                    # Remove any prior entries for changed modules, then append re-embedded docs.
+                    keep = [e for e in existing.entries if e.module_path not in only_files_norm]
+                    new_idx = _embed(docs)
+                    idx = SemanticIndex(
+                        entries=sorted(keep + new_idx.entries, key=lambda e: e.id),
+                        embedding_kind=new_idx.embedding_kind,
+                        embedding_model=new_idx.embedding_model,
                     )
                 else:
-                    idx = SemanticIndex.build(
-                        module_texts=module_texts,
-                        client=llm_client,
-                        model=config.llm.cheap_model or config.llm.model,
-                    )
-                idx.save(output_dir / "semantic_index.json")
+                    idx = _embed(docs)
+
+                idx.save(index_path)
                 if trace is not None:
                     trace.append(
                         {

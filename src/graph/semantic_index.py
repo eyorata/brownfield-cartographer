@@ -60,13 +60,23 @@ def embed_texts(
 
 @dataclass(frozen=True)
 class SemanticIndexEntry:
+    id: str
+    kind: str
     module_path: str
     embedding: List[float]
     text: str
+    symbol_name: str = ""
+    line_range: str = "1-1"
 
 
 class SemanticIndex:
-    def __init__(self, entries: List[SemanticIndexEntry], *, embedding_kind: str = "hash_embedding", embedding_model: str = "local-model"):
+    def __init__(
+        self,
+        entries: List[SemanticIndexEntry],
+        *,
+        embedding_kind: str = "hash_embedding",
+        embedding_model: str = "local-model",
+    ):
         self.entries = entries
         self.embedding_kind = embedding_kind
         self.embedding_model = embedding_model
@@ -82,9 +92,20 @@ class SemanticIndex:
         paths = [p for p, _ in module_texts]
         texts = [t for _, t in module_texts]
         embs = embed_texts(texts, client=client, model=model)
-        entries = [
-            SemanticIndexEntry(module_path=p, embedding=e, text=t) for p, e, t in zip(paths, embs, texts, strict=False)
-        ]
+        entries: List[SemanticIndexEntry] = []
+        for p, e, t in zip(paths, embs, texts, strict=False):
+            p = str(p)
+            entries.append(
+                SemanticIndexEntry(
+                    id=f"module:{p}",
+                    kind="module",
+                    module_path=p,
+                    symbol_name="",
+                    line_range="1-1",
+                    embedding=list(e),
+                    text=str(t),
+                )
+            )
         kind = "embedding" if client is not None else "hash_embedding"
         return cls(entries=entries, embedding_kind=kind, embedding_model=model)
 
@@ -96,23 +117,41 @@ class SemanticIndex:
         scored.sort(key=lambda x: x[0], reverse=True)
         out = []
         for score, ent in scored[: max(1, int(top_k))]:
-            out.append({"module": ent.module_path, "score": float(score)})
+            out.append(
+                {
+                    "id": ent.id,
+                    "kind": ent.kind,
+                    "module": ent.module_path,
+                    "symbol": ent.symbol_name,
+                    "line_range": ent.line_range,
+                    "score": float(score),
+                }
+            )
         return out
 
     def to_json(self) -> Dict[str, Any]:
         dim = len(self.entries[0].embedding) if self.entries and self.entries[0].embedding else 0
         return {
-            "version": 1,
+            "version": 2,
             "embedding_kind": self.embedding_kind,
             "embedding_model": self.embedding_model,
             "embedding_dim": dim,
             "entries": [
-                {"module_path": e.module_path, "embedding": e.embedding, "text": e.text[:2000]} for e in self.entries
+                {
+                    "id": e.id,
+                    "kind": e.kind,
+                    "module_path": e.module_path,
+                    "symbol_name": e.symbol_name,
+                    "line_range": e.line_range,
+                    "embedding": e.embedding,
+                    "text": e.text[:2000],
+                }
+                for e in self.entries
             ],
         }
 
     def as_map(self) -> Dict[str, SemanticIndexEntry]:
-        return {e.module_path: e for e in self.entries}
+        return {e.id: e for e in self.entries}
 
     def updated(
         self,
@@ -126,33 +165,78 @@ class SemanticIndex:
         If all_module_paths is provided, drop entries not present in that set.
         """
         existing = self.as_map()
-        paths = [p for p, _ in module_texts]
+        ids = [p for p, _ in module_texts]
         texts = [t for _, t in module_texts]
         embs = embed_texts(
             texts,
             client=client if self.embedding_kind == "embedding" else None,
             model=self.embedding_model,
         )
-        for p, e, t in zip(paths, embs, texts, strict=False):
-            existing[str(p)] = SemanticIndexEntry(module_path=str(p), embedding=list(e), text=str(t))
+        for i, e, t in zip(ids, embs, texts, strict=False):
+            i = str(i)
+            prev = existing.get(i)
+            if prev is None:
+                mp = ""
+                if i.startswith("module:"):
+                    mp = i.split("module:", 1)[1]
+                prev = SemanticIndexEntry(
+                    id=i,
+                    kind="module",
+                    module_path=mp,
+                    symbol_name="",
+                    line_range="1-1",
+                    embedding=list(e),
+                    text=str(t),
+                )
+            existing[i] = SemanticIndexEntry(
+                id=prev.id,
+                kind=prev.kind,
+                module_path=prev.module_path,
+                symbol_name=prev.symbol_name,
+                line_range=prev.line_range,
+                embedding=list(e),
+                text=str(t),
+            )
 
         if all_module_paths is not None:
             allowed = {str(x) for x in all_module_paths}
-            for k in list(existing.keys()):
-                if k not in allowed:
+            for k, v in list(existing.items()):
+                if v.module_path and v.module_path not in allowed:
                     existing.pop(k, None)
 
         entries = list(existing.values())
-        entries.sort(key=lambda x: x.module_path)
+        entries.sort(key=lambda x: x.id)
         return SemanticIndex(entries=entries, embedding_kind=self.embedding_kind, embedding_model=self.embedding_model)
+
+    @staticmethod
+    def make_entry_id(*, kind: str, module_path: str, symbol_name: str = "", line_range: str = "1-1") -> str:
+        kind = str(kind or "module")
+        module_path = str(module_path or "")
+        symbol_name = str(symbol_name or "")
+        line_range = str(line_range or "1-1")
+        if kind == "module":
+            return f"module:{module_path}"
+        return f"{kind}:{module_path}:{symbol_name}:{line_range}"
 
     @classmethod
     def from_json(cls, data: Dict[str, Any]) -> "SemanticIndex":
         kind = str(data.get("embedding_kind") or "hash_embedding")
         model = str(data.get("embedding_model") or "local-model")
+        version = int(data.get("version") or 1)
         entries = []
         for item in data.get("entries") or []:
-            mp = str(item.get("module_path") or "")
+            if version <= 1:
+                mp = str(item.get("module_path") or "")
+                entry_id = f"module:{mp}"
+                entry_kind = "module"
+                symbol_name = ""
+                line_range = "1-1"
+            else:
+                mp = str(item.get("module_path") or "")
+                entry_id = str(item.get("id") or "")
+                entry_kind = str(item.get("kind") or "module")
+                symbol_name = str(item.get("symbol_name") or "")
+                line_range = str(item.get("line_range") or "1-1")
             emb = item.get("embedding") or []
             txt = str(item.get("text") or "")
             if not mp or not isinstance(emb, list):
@@ -161,7 +245,19 @@ class SemanticIndex:
                 emb_f = [float(x) for x in emb]
             except Exception:
                 continue
-            entries.append(SemanticIndexEntry(module_path=mp, embedding=emb_f, text=txt))
+            if not entry_id:
+                entry_id = f"{entry_kind}:{mp}:{symbol_name}:{line_range}"
+            entries.append(
+                SemanticIndexEntry(
+                    id=entry_id,
+                    kind=entry_kind,
+                    module_path=mp,
+                    symbol_name=symbol_name,
+                    line_range=line_range,
+                    embedding=emb_f,
+                    text=txt,
+                )
+            )
         return cls(entries=entries, embedding_kind=kind, embedding_model=model)
 
     def save(self, path: str | Path) -> None:

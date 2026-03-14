@@ -228,14 +228,28 @@ class TreeSitterAnalyzer:
             elif isinstance(node, ast.FunctionDef):
                 if not node.name.startswith("_") or node.name == "__init__":
                     functions.append(node.name)
-                    function_defs.append({"name": node.name, "signature": "", "decorators": []})
+                    function_defs.append(
+                        {
+                            "name": node.name,
+                            "signature": "",
+                            "decorators": [],
+                            "line_range": _line_range(node),
+                        }
+                    )
             elif isinstance(node, ast.AsyncFunctionDef):
                 if not node.name.startswith("_") or node.name == "__init__":
                     functions.append(node.name)
-                    function_defs.append({"name": node.name, "signature": "", "decorators": []})
+                    function_defs.append(
+                        {
+                            "name": node.name,
+                            "signature": "",
+                            "decorators": [],
+                            "line_range": _line_range(node),
+                        }
+                    )
             elif isinstance(node, ast.ClassDef):
                 classes.append(node.name)
-                class_defs.append({"name": node.name, "bases": "", "decorators": []})
+                class_defs.append({"name": node.name, "bases": "", "decorators": [], "line_range": _line_range(node)})
             elif isinstance(node, ast.Call):
                 call_path = _call_path(node.func)
                 func_name = ""
@@ -357,6 +371,30 @@ class TreeSitterAnalyzer:
                 # Prefer richer AST data-op extraction for lineage (better literals + line ranges).
                 if ast_result.get("data_ops"):
                     ts_result["data_ops"] = ast_result.get("data_ops") or []
+                # Merge line ranges from AST onto tree-sitter function/class defs.
+                try:
+                    ast_fn_lr = {
+                        str(d.get("name") or ""): str(d.get("line_range") or "")
+                        for d in (ast_result.get("function_defs") or [])
+                        if isinstance(d, dict)
+                    }
+                    for d in (ts_result.get("function_defs") or []):
+                        if isinstance(d, dict) and d.get("name") and not d.get("line_range"):
+                            lr = ast_fn_lr.get(str(d.get("name")))
+                            if lr:
+                                d["line_range"] = lr
+                    ast_cls_lr = {
+                        str(d.get("name") or ""): str(d.get("line_range") or "")
+                        for d in (ast_result.get("class_defs") or [])
+                        if isinstance(d, dict)
+                    }
+                    for d in (ts_result.get("class_defs") or []):
+                        if isinstance(d, dict) and d.get("name") and not d.get("line_range"):
+                            lr = ast_cls_lr.get(str(d.get("name")))
+                            if lr:
+                                d["line_range"] = lr
+                except Exception:
+                    pass
                 return ts_result
 
         if ast_result["imports"] or ast_result["functions"] or ast_result["classes"]:

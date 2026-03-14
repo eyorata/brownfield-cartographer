@@ -1,6 +1,6 @@
 # onboarding_brief.md
 
-Generated: 2026-03-13T20:18:50Z
+Generated: 2026-03-14T09:27:55Z
 Target repo: C:\Users\user\Documents\brownfield-cartographer\brownfield-cartographer
 
 ## Day-One Questions (Semanticist)
@@ -34,14 +34,14 @@ Target repo: C:\Users\user\Documents\brownfield-cartographer\brownfield-cartogra
 
 ### 5) What changed recently?
 - Top changed files (30d):
+  - src/orchestrator.py (touches=12)
   - src/cli.py (touches=11)
-  - src/orchestrator.py (touches=11)
-  - src/agents/hydrologist.py (touches=8)
+  - src/agents/hydrologist.py (touches=9)
   - src/agents/surveyor.py (touches=8)
   - src/analyzers/sql_lineage.py (touches=7)
+  - src/agents/semanticist.py (touches=6)
+  - src/analyzers/tree_sitter_analyzer.py (touches=6)
   - .gitignore (touches=6)
-  - src/agents/semanticist.py (touches=5)
-  - src/analyzers/tree_sitter_analyzer.py (touches=5)
-  - src/ui_server.py (touches=4)
-  - src/graph/knowledge_graph.py (touches=4)
+  - src/analyzers/dag_config_parser.py (touches=5)
+  - README.md (touches=4)
 

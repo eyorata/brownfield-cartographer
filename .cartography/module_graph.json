@@ -4,16 +4,16 @@
   "graph": {
     "top_velocity_files_30d": [
       {
+        "path": "src/orchestrator.py",
+        "touches": 12
+      },
+      {
         "path": "src/cli.py",
         "touches": 11
       },
       {
-        "path": "src/orchestrator.py",
-        "touches": 11
-      },
-      {
         "path": "src/agents/hydrologist.py",
-        "touches": 8
+        "touches": 9
       },
       {
         "path": "src/agents/surveyor.py",
@@ -24,23 +24,23 @@
         "touches": 7
       },
       {
+        "path": "src/agents/semanticist.py",
+        "touches": 6
+      },
+      {
+        "path": "src/analyzers/tree_sitter_analyzer.py",
+        "touches": 6
+      },
+      {
         "path": ".gitignore",
         "touches": 6
       },
       {
-        "path": "src/agents/semanticist.py",
+        "path": "src/analyzers/dag_config_parser.py",
         "touches": 5
       },
       {
-        "path": "src/analyzers/tree_sitter_analyzer.py",
-        "touches": 5
-      },
-      {
-        "path": "src/ui_server.py",
-        "touches": 4
-      },
-      {
-        "path": "src/graph/knowledge_graph.py",
+        "path": "README.md",
         "touches": 4
       }
     ],
@@ -65,7 +65,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "default-field",
+      "domain_cluster": "head-model",
       "domain_cluster_method": "embedding",
       "purpose_statement": "cartography_config.yaml is a YAML configuration file.",
       "purpose_method": "heuristic",
@@ -82,7 +82,8 @@
         {
           "name": "main",
           "signature": "()",
-          "decorators": []
+          "decorators": [],
+          "line_range": "1-2"
         }
       ],
       "class_defs": [],
@@ -91,7 +92,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "edge-source_file",
+      "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
       "purpose_statement": "main.py defines functions: main.",
       "purpose_method": "heuristic",
@@ -113,7 +114,8 @@
         {
           "name": "main",
           "signature": "()",
-          "decorators": []
+          "decorators": [],
+          "line_range": "86-263"
         }
       ],
       "class_defs": [],
@@ -232,40 +234,46 @@
       "language": "python",
       "change_velocity_30d": 2,
       "is_dead_code_candidate": true,
-      "last_modified": "1773430386",
+      "last_modified": "1773480042",
       "public_symbol_count": 6,
       "function_defs": [
         {
           "name": "load_config",
           "signature": "(path: str | Path | None)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "59-84"
         }
       ],
       "class_defs": [
         {
           "name": "LLMConfig",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "10-23"
         },
         {
           "name": "SemanticistConfig",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "26-39"
         },
         {
           "name": "NavigatorConfig",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "42-44"
         },
         {
           "name": "IncrementalConfig",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "47-49"
         },
         {
           "name": "CartographyConfig",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "52-56"
         }
       ],
       "data_ops": [
@@ -324,13 +332,13 @@
           "module": "yaml",
           "level": 0,
           "names": [],
-          "line_range": "67-67"
+          "line_range": "73-73"
         }
       ],
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "default-field",
+      "domain_cluster": "field-default",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/config.py defines classes: CartographyConfig, IncrementalConfig, LLMConfig, NavigatorConfig, SemanticistConfig; functions: load_config.",
       "purpose_method": "heuristic",
@@ -344,7 +352,7 @@
     {
       "path": "src/orchestrator.py",
       "language": "python",
-      "change_velocity_30d": 11,
+      "change_velocity_30d": 12,
       "is_dead_code_candidate": true,
       "last_modified": "1773432900",
       "public_symbol_count": 2,
@@ -352,19 +360,22 @@
         {
           "name": "__init__",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "39-44"
         },
         {
           "name": "run_analysis",
           "signature": "(\n        self,\n        repo_path: str | Path,\n        output_dir: str | Path | None = None,\n        phases: list[str] | None = None,\n        config: CartographyConfig | None = None,\n        incremental: bool = False,\n    )",
-          "decorators": []
+          "decorators": [],
+          "line_range": "46-213"
         }
       ],
       "class_defs": [
         {
           "name": "Orchestrator",
           "bases": "",
-          "decorators": []
+          "decorators": [],
+          "line_range": "38-269"
         }
       ],
       "data_ops": [
@@ -538,59 +549,70 @@
         {
           "name": "score",
           "signature": "(n: Dict[str, Any])",
-          "decorators": []
+          "decorators": [],
+          "line_range": "136-141"
         },
         {
           "name": "__init__",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "221-223"
         },
         {
           "name": "create",
           "signature": "(self, requested_path: str)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "225-245"
         },
         {
           "name": "get",
           "signature": "(self, job_id: str)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "247-250"
         },
         {
           "name": "update",
           "signature": "(self, job_id: str, **kwargs: Any)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "252-256"
         },
         {
           "name": "do_GET",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "861-973"
         },
         {
           "name": "do_POST",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "975-1000"
         },
         {
           "name": "log_message",
           "signature": "(self, format: str, *args: Any)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "1002-1004"
         },
         {
           "name": "serve",
           "signature": "(host: str = \"127.0.0.1\", port: int = 8000)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "1007-1013"
         }
       ],
       "class_defs": [
         {
           "name": "_JobStore",
           "bases": "",
-          "decorators": []
+          "decorators": [],
+          "line_range": "220-256"
         },
         {
           "name": "Handler",
           "bases": "(BaseHTTPRequestHandler)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "842-1004"
         }
       ],
       "data_ops": [
@@ -800,7 +822,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "edge-source_file",
+      "domain_cluster": "field-default",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/__init__.py is a Python module.",
       "purpose_method": "heuristic",
@@ -820,29 +842,34 @@
         {
           "name": "__init__",
           "signature": "(self, kg: KnowledgeGraph)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "21-22"
         },
         {
           "name": "write_codebase_md",
           "signature": "(self, repo_root: Path, out_dir: Path)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "43-150"
         },
         {
           "name": "write_onboarding_brief",
           "signature": "(self, repo_root: Path, out_dir: Path)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "152-246"
         },
         {
           "name": "write_trace",
           "signature": "(self, out_dir: Path, events: List[Dict[str, Any]])",
-          "decorators": []
+          "decorators": [],
+          "line_range": "248-253"
         }
       ],
       "class_defs": [
         {
           "name": "Archivist",
           "bases": "",
-          "decorators": []
+          "decorators": [],
+          "line_range": "16-253"
         }
       ],
       "data_ops": [
@@ -958,7 +985,7 @@
     {
       "path": "src/agents/hydrologist.py",
       "language": "python",
-      "change_velocity_30d": 8,
+      "change_velocity_30d": 9,
       "is_dead_code_candidate": true,
       "last_modified": "1773432664",
       "public_symbol_count": 5,
@@ -966,34 +993,40 @@
         {
           "name": "__init__",
           "signature": "(self, kg: KnowledgeGraph)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "16-17"
         },
         {
           "name": "analyze",
           "signature": "(self, repo_path: str | Path, only_files: set[str] | None = None, trace: list[dict] | None = None)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "40-462"
         },
         {
           "name": "find_sources",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "464-472"
         },
         {
           "name": "find_sinks",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "474-481"
         },
         {
           "name": "blast_radius",
           "signature": "(self, node: str)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "483-494"
         }
       ],
       "class_defs": [
         {
           "name": "Hydrologist",
           "bases": "",
-          "decorators": []
+          "decorators": [],
+          "line_range": "15-494"
         }
       ],
       "data_ops": [
@@ -1117,70 +1150,82 @@
     {
       "path": "src/agents/navigator.py",
       "language": "python",
-      "change_velocity_30d": 3,
+      "change_velocity_30d": 4,
       "is_dead_code_candidate": true,
-      "last_modified": "1773432882",
+      "last_modified": "1773480234",
       "public_symbol_count": 15,
       "function_defs": [
         {
           "name": "__init__",
           "signature": "(\n        self,\n        kg: KnowledgeGraph,\n        repo_root: Path | None = None,\n        config: CartographyConfig | None = None,\n        graph_dir: Path | None = None,\n    )",
-          "decorators": []
+          "decorators": [],
+          "line_range": "51-73"
         },
         {
           "name": "stats",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "75-81"
         },
         {
           "name": "list_sources",
           "signature": "(self, limit: int = 50)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "83-84"
         },
         {
           "name": "list_sinks",
           "signature": "(self, limit: int = 50)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "86-87"
         },
         {
           "name": "blast_radius",
           "signature": "(self, dataset_or_node: str, limit: int = 200)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "89-90"
         },
         {
           "name": "trace_lineage",
           "signature": "(\n        self,\n        node: str,\n        direction: str = \"down\",\n        max_depth: int = 6,\n        max_paths: int = 25,\n    )",
-          "decorators": []
+          "decorators": [],
+          "line_range": "92-127"
         },
         {
           "name": "module_summary",
           "signature": "(self, module_path: str, limit_neighbors: int = 30)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "129-149"
         },
         {
           "name": "find_implementation",
           "signature": "(self, query: str, limit: int = 25)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "170-251"
         },
         {
           "name": "trace_lineage_tool",
           "signature": "(self, node: str, direction: str = \"up\", max_depth: int = 6)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "272-279"
         },
         {
           "name": "blast_radius_tool",
           "signature": "(self, node: str)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "281-288"
         },
         {
           "name": "explain_module",
           "signature": "(self, module_path: str)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "290-309"
         },
         {
           "name": "ask",
           "signature": "(self, question: str)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "403-444"
         }
       ],
       "class_defs": [
@@ -1189,29 +1234,34 @@
           "bases": "",
           "decorators": [
             "@dataclass(frozen=True)"
-          ]
+          ],
+          "line_range": "24-25"
         },
         {
           "name": "Citation",
           "bases": "",
           "decorators": [
             "@dataclass(frozen=True)"
-          ]
+          ],
+          "line_range": "29-32"
         },
         {
           "name": "ToolResult",
           "bases": "(TypedDict)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "35-38"
         },
         {
           "name": "Navigator",
           "bases": "",
-          "decorators": []
+          "decorators": [],
+          "line_range": "41-444"
         },
         {
           "name": "_NavState",
           "bases": "(TypedDict)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "313-318"
         }
       ],
       "data_ops": [
@@ -1225,7 +1275,7 @@
         },
         {
           "type": "self._read_file_snippet",
-          "args": "(m[\"module\"], 1, 60)"
+          "args": "(m[\"module\"], start, end)"
         },
         {
           "type": "self._read_file_snippet",
@@ -1369,78 +1419,90 @@
     {
       "path": "src/agents/semanticist.py",
       "language": "python",
-      "change_velocity_30d": 5,
+      "change_velocity_30d": 6,
       "is_dead_code_candidate": true,
-      "last_modified": "1773432846",
+      "last_modified": "1773480201",
       "public_symbol_count": 15,
       "function_defs": [
         {
           "name": "__init__",
           "signature": "(self, token_budget: int)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "126-127"
         },
         {
           "name": "remaining",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "50-51"
         },
         {
           "name": "try_add",
           "signature": "(self, title: str, text: str, citations: Optional[List[Citation]] = None)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "53-66"
         },
         {
           "name": "render",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "68-78"
         },
         {
           "name": "choose_model",
           "signature": "(self, *, config: CartographyConfig, task: str)",
           "decorators": [
             "@dataclass"
-          ]
+          ],
+          "line_range": "95-101"
         },
         {
           "name": "estimate_total_tokens",
           "signature": "(self, *, prompt: str, max_response_tokens: int)",
           "decorators": [
             "@dataclass"
-          ]
+          ],
+          "line_range": "103-105"
         },
         {
           "name": "can_call",
           "signature": "(self, *, prompt: str, max_response_tokens: int)",
           "decorators": [
             "@dataclass"
-          ]
+          ],
+          "line_range": "107-110"
         },
         {
           "name": "spend",
           "signature": "(self, *, kind: str, model: str, prompt: str, response: str)",
           "decorators": [
             "@dataclass"
-          ]
+          ],
+          "line_range": "112-115"
         },
         {
           "name": "__init__",
           "signature": "(self, kg: KnowledgeGraph)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "126-127"
         },
         {
           "name": "annotate_modules",
           "signature": "(\n        self,\n        repo_root: Path,\n        config: CartographyConfig | None = None,\n        trace: list[dict] | None = None,\n        output_dir: Path | None = None,\n        only_files: set[str] | None = None,\n        budget: LLMBudget | None = None,\n    )",
-          "decorators": []
+          "decorators": [],
+          "line_range": "254-721"
         },
         {
           "name": "answer_day_one_questions",
           "signature": "(\n        self,\n        repo_root: Path,\n        config: CartographyConfig | None = None,\n        trace: list[dict] | None = None,\n        budget: LLMBudget | None = None,\n    )",
-          "decorators": []
+          "decorators": [],
+          "line_range": "723-844"
         },
         {
           "name": "run",
           "signature": "(\n        self,\n        repo_root: Path,\n        config: CartographyConfig | None = None,\n        trace: list[dict] | None = None,\n        output_dir: Path | None = None,\n        only_files: set[str] | None = None,\n    )",
-          "decorators": []
+          "decorators": [],
+          "line_range": "846-868"
         }
       ],
       "class_defs": [
@@ -1449,31 +1511,36 @@
           "bases": "",
           "decorators": [
             "@dataclass(frozen=True)"
-          ]
+          ],
+          "line_range": "22-24"
         },
         {
           "name": "Citation",
           "bases": "",
           "decorators": [
             "@dataclass(frozen=True)"
-          ]
+          ],
+          "line_range": "28-31"
         },
         {
           "name": "ContextWindowBudget",
           "bases": "",
-          "decorators": []
+          "decorators": [],
+          "line_range": "34-78"
         },
         {
           "name": "LLMBudget",
           "bases": "",
           "decorators": [
             "@dataclass"
-          ]
+          ],
+          "line_range": "81-115"
         },
         {
           "name": "Semanticist",
           "bases": "",
-          "decorators": []
+          "decorators": [],
+          "line_range": "118-868"
         }
       ],
       "data_ops": [
@@ -1496,6 +1563,22 @@
         {
           "type": "fp.read_text",
           "args": "(encoding=\"utf-8\", errors=\"ignore\")"
+        },
+        {
+          "type": "fp.read_text(encoding=\"utf-8\", errors=\"ignore\").splitlines",
+          "args": "()"
+        },
+        {
+          "type": "fp.read_text",
+          "args": "(encoding=\"utf-8\", errors=\"ignore\")"
+        },
+        {
+          "type": "_read_snippet",
+          "args": "(rel, lr)"
+        },
+        {
+          "type": "_read_snippet",
+          "args": "(rel, lr)"
         },
         {
           "type": "file_path.read_text",
@@ -1621,6 +1704,7 @@
           "level": 0,
           "names": [
             "SemanticIndex",
+            "SemanticIndexEntry",
             "embed_texts"
           ],
           "line_range": "18-18"
@@ -1632,21 +1716,21 @@
           "names": [
             "Hydrologist"
           ],
-          "line_range": "652-652"
+          "line_range": "773-773"
         },
         {
           "kind": "import",
           "module": "json",
           "level": 0,
           "names": [],
-          "line_range": "696-696"
+          "line_range": "817-817"
         },
         {
           "kind": "import",
           "module": "json",
           "level": 0,
           "names": [],
-          "line_range": "556-556"
+          "line_range": "677-677"
         }
       ],
       "pagerank": 0.03724394781300256,
@@ -1674,24 +1758,28 @@
         {
           "name": "__init__",
           "signature": "(self, kg: KnowledgeGraph)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "19-21"
         },
         {
           "name": "analyze",
           "signature": "(self, repo_path: str | Path, only_files: set[str] | None = None, trace: list[dict] | None = None)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "97-297"
         },
         {
           "name": "resolve_module",
           "signature": "(module_parts, line_range: str = \"1-1\")",
-          "decorators": []
+          "decorators": [],
+          "line_range": "204-231"
         }
       ],
       "class_defs": [
         {
           "name": "Surveyor",
           "bases": "",
-          "decorators": []
+          "decorators": [],
+          "line_range": "18-297"
         }
       ],
       "data_ops": [],
@@ -1818,7 +1906,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "__init__-package",
+      "domain_cluster": "field-default",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/agents/__init__.py is a Python module.",
       "purpose_method": "heuristic",
@@ -1830,7 +1918,7 @@
     {
       "path": "src/analyzers/dag_config_parser.py",
       "language": "python",
-      "change_velocity_30d": 4,
+      "change_velocity_30d": 5,
       "is_dead_code_candidate": true,
       "last_modified": "1773432563",
       "public_symbol_count": 4,
@@ -1838,24 +1926,28 @@
         {
           "name": "parse_dbt_yaml",
           "signature": "(self, file_path: str)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "7-43"
         },
         {
           "name": "parse_airflow_yaml",
           "signature": "(self, file_path: str)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "45-80"
         },
         {
           "name": "parse_airflow_py",
           "signature": "(self, file_path: str)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "106-236"
         }
       ],
       "class_defs": [
         {
           "name": "DAGConfigParser",
           "bases": "",
-          "decorators": []
+          "decorators": [],
+          "line_range": "6-236"
         }
       ],
       "data_ops": [
@@ -1925,24 +2017,28 @@
         {
           "name": "__init__",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "14-18"
         },
         {
           "name": "extract_dependencies",
           "signature": "(self, sql_query: str, dialect: str = \"postgres\")",
-          "decorators": []
+          "decorators": [],
+          "line_range": "35-182"
         },
         {
           "name": "consume_parse_failures",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "184-190"
         }
       ],
       "class_defs": [
         {
           "name": "SQLLineageAnalyzer",
           "bases": "",
-          "decorators": []
+          "decorators": [],
+          "line_range": "13-190"
         }
       ],
       "data_ops": [],
@@ -2017,92 +2113,108 @@
     {
       "path": "src/analyzers/tree_sitter_analyzer.py",
       "language": "python",
-      "change_velocity_30d": 5,
+      "change_velocity_30d": 6,
       "is_dead_code_candidate": true,
-      "last_modified": "1773432606",
+      "last_modified": "1773480058",
       "public_symbol_count": 9,
       "function_defs": [
         {
           "name": "__init__",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "32-34"
         },
         {
           "name": "get_language",
           "signature": "(self, ext: str)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "28-29"
         },
         {
           "name": "__init__",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "32-34"
         },
         {
           "name": "text",
           "signature": "(node)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "513-514"
         },
         {
           "name": "traverse",
           "signature": "(node, decorators: Optional[List[str]] = None)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "516-531"
         },
         {
           "name": "analyze_python_module",
           "signature": "(self, file_path: str)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "361-462"
         },
         {
           "name": "traverse",
           "signature": "(node)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "516-531"
         },
         {
           "name": "parse_python",
           "signature": "(self, file_path)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "464-465"
         },
         {
           "name": "parse_sql",
           "signature": "(self, file_path)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "467-496"
         },
         {
           "name": "text",
           "signature": "(node)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "513-514"
         },
         {
           "name": "traverse",
           "signature": "(node)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "516-531"
         },
         {
           "name": "parse_yaml",
           "signature": "(self, file_path)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "498-534"
         },
         {
           "name": "text",
           "signature": "(node)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "513-514"
         },
         {
           "name": "traverse",
           "signature": "(node, stack: List[str])",
-          "decorators": []
+          "decorators": [],
+          "line_range": "516-531"
         }
       ],
       "class_defs": [
         {
           "name": "LanguageRouter",
           "bases": "",
-          "decorators": []
+          "decorators": [],
+          "line_range": "14-29"
         },
         {
           "name": "TreeSitterAnalyzer",
           "bases": "",
-          "decorators": []
+          "decorators": [],
+          "line_range": "31-534"
         }
       ],
       "data_ops": [
@@ -2198,7 +2310,7 @@
           "module": "yaml",
           "level": 0,
           "names": [],
-          "line_range": "465-465"
+          "line_range": "503-503"
         }
       ],
       "pagerank": 0.03724394781300256,
@@ -2229,7 +2341,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "__init__-package",
+      "domain_cluster": "field-default",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/analyzers/__init__.py is a Python module.",
       "purpose_method": "heuristic",
@@ -2249,88 +2361,104 @@
         {
           "name": "__init__",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "18-20"
         },
         {
           "name": "add_module_node",
           "signature": "(self, node: ModuleNode)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "25-26"
         },
         {
           "name": "add_import_edge",
           "signature": "(self, edge: ImportsEdge)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "28-36"
         },
         {
           "name": "add_dataset_node",
           "signature": "(self, node: DatasetNode)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "38-39"
         },
         {
           "name": "add_transformation_node",
           "signature": "(self, node: TransformationNode)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "41-43"
         },
         {
           "name": "add_consumes_edge",
           "signature": "(self, edge: ConsumesEdge, **attrs: Any)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "45-54"
         },
         {
           "name": "add_produces_edge",
           "signature": "(self, edge: ProducesEdge, **attrs: Any)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "56-65"
         },
         {
           "name": "add_calls_edge",
           "signature": "(self, edge: CallsEdge, **attrs: Any)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "67-75"
         },
         {
           "name": "add_configures_edge",
           "signature": "(self, edge: ConfiguresEdge, **attrs: Any)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "77-85"
         },
         {
           "name": "serialize_module_graph",
           "signature": "(self, output_path: str)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "87-90"
         },
         {
           "name": "serialize_lineage_graph",
           "signature": "(self, output_path: str)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "92-95"
         },
         {
           "name": "deserialize_module_graph",
           "signature": "(input_path: str | Path)",
           "decorators": [
             "@staticmethod"
-          ]
+          ],
+          "line_range": "98-101"
         },
         {
           "name": "deserialize_lineage_graph",
           "signature": "(input_path: str | Path)",
           "decorators": [
             "@staticmethod"
-          ]
+          ],
+          "line_range": "104-107"
         },
         {
           "name": "load_from_dir",
           "signature": "(self, output_dir: str | Path)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "109-116"
         },
         {
           "name": "prune_changed_files",
           "signature": "(self, changed_rel_paths: set[str])",
-          "decorators": []
+          "decorators": [],
+          "line_range": "118-162"
         }
       ],
       "class_defs": [
         {
           "name": "KnowledgeGraph",
           "bases": "",
-          "decorators": []
+          "decorators": [],
+          "line_range": "17-162"
         }
       ],
       "data_ops": [],
@@ -2425,66 +2553,84 @@
     {
       "path": "src/graph/semantic_index.py",
       "language": "python",
-      "change_velocity_30d": 1,
+      "change_velocity_30d": 2,
       "is_dead_code_candidate": true,
-      "last_modified": "1773432686",
-      "public_symbol_count": 11,
+      "last_modified": "1773480257",
+      "public_symbol_count": 12,
       "function_defs": [
         {
           "name": "embed_texts",
           "signature": "(\n    texts: List[str],\n    *,\n    client: Optional[OpenAICompatClient] = None,\n    model: str = \"local-model\",\n)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "46-58"
         },
         {
           "name": "__init__",
-          "signature": "(self, entries: List[SemanticIndexEntry], *, embedding_kind: str = \"hash_embedding\", embedding_model: str = \"local-model\")",
-          "decorators": []
+          "signature": "(\n        self,\n        entries: List[SemanticIndexEntry],\n        *,\n        embedding_kind: str = \"hash_embedding\",\n        embedding_model: str = \"local-model\",\n    )",
+          "decorators": [],
+          "line_range": "73-82"
         },
         {
           "name": "build",
           "signature": "(\n        cls,\n        *,\n        module_texts: List[Tuple[str, str]],\n        client: Optional[OpenAICompatClient] = None,\n        model: str = \"local-model\",\n    )",
           "decorators": [
             "@classmethod"
-          ]
+          ],
+          "line_range": "85-110"
         },
         {
           "name": "search",
           "signature": "(self, query: str, top_k: int = 25, *, client: Optional[OpenAICompatClient] = None)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "112-130"
         },
         {
           "name": "to_json",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "132-151"
         },
         {
           "name": "as_map",
           "signature": "(self)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "153-154"
         },
         {
           "name": "updated",
           "signature": "(\n        self,\n        *,\n        module_texts: List[Tuple[str, str]],\n        all_module_paths: Optional[Iterable[str]] = None,\n        client: Optional[OpenAICompatClient] = None,\n    )",
-          "decorators": []
+          "decorators": [],
+          "line_range": "156-209"
+        },
+        {
+          "name": "make_entry_id",
+          "signature": "(*, kind: str, module_path: str, symbol_name: str = \"\", line_range: str = \"1-1\")",
+          "decorators": [
+            "@staticmethod"
+          ],
+          "line_range": "212-219"
         },
         {
           "name": "from_json",
           "signature": "(cls, data: Dict[str, Any])",
           "decorators": [
             "@classmethod"
-          ]
+          ],
+          "line_range": "222-261"
         },
         {
           "name": "save",
           "signature": "(self, path: str | Path)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "263-266"
         },
         {
           "name": "load",
           "signature": "(cls, path: str | Path)",
           "decorators": [
             "@classmethod"
-          ]
+          ],
+          "line_range": "269-279"
         }
       ],
       "class_defs": [
@@ -2493,12 +2639,14 @@
           "bases": "",
           "decorators": [
             "@dataclass(frozen=True)"
-          ]
+          ],
+          "line_range": "62-69"
         },
         {
           "name": "SemanticIndex",
           "bases": "",
-          "decorators": []
+          "decorators": [],
+          "line_range": "72-279"
         }
       ],
       "data_ops": [
@@ -2589,7 +2737,7 @@
       "import_out_degree": 0,
       "domain_cluster": "str-path",
       "domain_cluster_method": "embedding",
-      "purpose_statement": "src/graph/semantic_index.py defines classes: SemanticIndex, SemanticIndexEntry; functions: __init__, as_map, build, embed_texts, from_json, load, save, search.",
+      "purpose_statement": "src/graph/semantic_index.py defines classes: SemanticIndex, SemanticIndexEntry; functions: __init__, as_map, build, embed_texts, from_json, load, make_entry_id, save.",
       "purpose_method": "heuristic",
       "doc_drift_score": 0.6,
       "doc_drift_flags": [
@@ -2612,7 +2760,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "__init__-package",
+      "domain_cluster": "field-default",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/graph/__init__.py is a Python module.",
       "purpose_method": "heuristic",
@@ -2632,27 +2780,32 @@
         {
           "name": "__init__",
           "signature": "(self, base_url: str, api_key: str, timeout_s: int = 90)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "24-27"
         },
         {
           "name": "get_models",
           "signature": "(self, timeout_s: int = 3)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "29-40"
         },
         {
           "name": "is_available",
           "signature": "(self, timeout_s: int = 3)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "42-47"
         },
         {
           "name": "chat_completions",
           "signature": "(\n        self,\n        *,\n        model: str,\n        messages: List[ChatMessage],\n        temperature: float = 0.2,\n        max_tokens: int = 900,\n        response_format: Optional[Dict[str, Any]] = None,\n        retries: int = 2,\n    )",
-          "decorators": []
+          "decorators": [],
+          "line_range": "49-91"
         },
         {
           "name": "embeddings",
           "signature": "(\n        self,\n        *,\n        model: str,\n        inputs: List[str],\n        retries: int = 2,\n    )",
-          "decorators": []
+          "decorators": [],
+          "line_range": "93-140"
         }
       ],
       "class_defs": [
@@ -2661,12 +2814,14 @@
           "bases": "",
           "decorators": [
             "@dataclass(frozen=True)"
-          ]
+          ],
+          "line_range": "12-14"
         },
         {
           "name": "OpenAICompatClient",
           "bases": "",
-          "decorators": []
+          "decorators": [],
+          "line_range": "17-140"
         }
       ],
       "data_ops": [
@@ -2800,7 +2955,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 1,
-      "domain_cluster": "__init__-package",
+      "domain_cluster": "field-default",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/llm/__init__.py is a Python module.",
       "purpose_method": "heuristic",
@@ -2821,27 +2976,32 @@
         {
           "name": "ImportsEdge",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "7-13"
         },
         {
           "name": "ProducesEdge",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "15-21"
         },
         {
           "name": "ConsumesEdge",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "23-29"
         },
         {
           "name": "CallsEdge",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "31-36"
         },
         {
           "name": "ConfiguresEdge",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "38-43"
         }
       ],
       "data_ops": [],
@@ -2903,24 +3063,28 @@
           "signature": "(cls, data: Dict[str, Any])",
           "decorators": [
             "@classmethod"
-          ]
+          ],
+          "line_range": "27-43"
         }
       ],
       "class_defs": [
         {
           "name": "GraphNode",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "8-10"
         },
         {
           "name": "GraphEdge",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "13-16"
         },
         {
           "name": "NodeLinkGraph",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "19-43"
         }
       ],
       "data_ops": [],
@@ -2983,22 +3147,26 @@
         {
           "name": "ModuleNode",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "7-34"
         },
         {
           "name": "DatasetNode",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "36-42"
         },
         {
           "name": "FunctionNode",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "44-50"
         },
         {
           "name": "TransformationNode",
           "bases": "(BaseModel)",
-          "decorators": []
+          "decorators": [],
+          "line_range": "52-63"
         }
       ],
       "data_ops": [],
@@ -3063,7 +3231,7 @@
       "pagerank": 0.03724394781300256,
       "import_in_degree": 0,
       "import_out_degree": 0,
-      "domain_cluster": "__init__-package",
+      "domain_cluster": "field-default",
       "domain_cluster_method": "embedding",
       "purpose_statement": "src/models/__init__.py is a Python module.",
       "purpose_method": "heuristic",

@@ -190,9 +190,15 @@ class Navigator:
                 a = dict(self.kg.module_graph.nodes[path])
                 fn = [f.get("name") for f in (a.get("function_defs") or []) if isinstance(f, dict) and f.get("name")]
                 cl = [c.get("name") for c in (a.get("class_defs") or []) if isinstance(c, dict) and c.get("name")]
+                kind = str(hit.get("kind") or "module")
+                symbol = str(hit.get("symbol") or "")
+                lr = str(hit.get("line_range") or "1-1")
                 matches.append(
                     {
                         "module": path,
+                        "kind": kind,
+                        "symbol": symbol,
+                        "line_range": lr,
                         "score": float(hit.get("score") or 0.0),
                         "functions": fn[:12],
                         "classes": cl[:12],
@@ -229,7 +235,17 @@ class Navigator:
 
         citations: List[str] = []
         for m in matches[:10]:
-            c = self._read_file_snippet(m["module"], 1, 60)
+            start = 1
+            end = 60
+            try:
+                lr = str(m.get("line_range") or "")
+                if lr and "-" in lr:
+                    a, b = [int(x) for x in lr.split("-", 1)]
+                    start = max(1, a)
+                    end = max(start, min(b, start + 80))
+            except Exception:
+                start, end = 1, 60
+            c = self._read_file_snippet(m["module"], start, end)
             if c:
                 citations.append(f"{c.file}:{c.line_range} (static)")
         return {"ok": True, "result": matches, "citations": citations}

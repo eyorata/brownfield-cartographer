@@ -31,6 +31,7 @@ This runs the four-phase pipeline (Surveyor, Hydrologist, Semanticist, Archivist
 - `CODEBASE.md`: A generated overview (graph summary + top modules).
 - `onboarding_brief.md`: A generated Day-One-style brief (auto, based on graphs).
 - `cartography_trace.jsonl`: Phase trace events.
+- `semantic_index.json`: A semantic index (vector-searchable) containing module + function + class entries.
 
 Optionally also write a second copy of artifacts elsewhere (useful for committing artifacts from this tool repo):
 
