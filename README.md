@@ -19,6 +19,12 @@ Run the core analysis pipeline on a given repository (local path or GitHub URL):
 ./.venv/Scripts/python.exe src/cli.py analyze /path/to/your/repo
 ```
 
+You can also pass a GitHub URL (the CLI will shallow-clone it under `.cartography/_repos/`):
+
+```bash
+./.venv/Scripts/python.exe src/cli.py analyze https://github.com/dbt-labs/dbt-core
+```
+
 This runs the four-phase pipeline (Surveyor, Hydrologist, Semanticist, Archivist) and generates output artifacts in the *target repo's* `.cartography/` directory, including:
 - `module_graph.json`: The layout and structure.
 - `lineage_graph.json`: Data flow tracking.
@@ -37,6 +43,12 @@ Once analysis is complete, you can interact with the graph.
 
 ```bash
 ./.venv/Scripts/python.exe src/cli.py query /path/to/analyzed/repo
+```
+
+`query` also accepts a GitHub URL and will clone it (useful if you analyzed a cloned repo previously and want to re-open it):
+
+```bash
+./.venv/Scripts/python.exe src/cli.py query https://github.com/dbt-labs/dbt-core
 ```
 
 Example interactive commands:
