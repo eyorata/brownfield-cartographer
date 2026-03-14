@@ -1,0 +1,17 @@
+{
+  "directed": true,
+  "multigraph": false,
+  "graph": {
+    "llm_usage": {
+      "max_total_tokens": 200000,
+      "used_tokens": 0,
+      "calls": [],
+      "skipped": 0
+    },
+    "day_one_answers": {
+      "error": "LLM unavailable for day-one answers. Start LM Studio server and re-run semanticist."
+    }
+  },
+  "nodes": [],
+  "edges": []
+}

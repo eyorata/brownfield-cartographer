@@ -1,0 +1,11 @@
+{"ts": "2026-03-14T12:30:44Z", "event": "start", "repo_root": "C:\\Users\\user\\Documents\\brownfield-cartographer\\brownfield-cartographer\\targets\\Roo-Code", "phases": ["surveyor", "hydrologist", "semanticist", "archivist"]}
+{"ts": "2026-03-14T12:30:44Z", "event": "phase_start", "phase": "surveyor"}
+{"ts": "2026-03-14T12:30:44Z", "event": "phase_end", "phase": "surveyor"}
+{"ts": "2026-03-14T12:30:44Z", "event": "phase_start", "phase": "hydrologist"}
+{"ts": "2026-03-14T12:30:44Z", "event": "phase_end", "phase": "hydrologist"}
+{"ts": "2026-03-14T12:30:44Z", "event": "phase_start", "phase": "semanticist"}
+{"ts": "2026-03-14T12:30:44Z", "event": "phase_end", "phase": "semanticist"}
+{"ts": "2026-03-14T12:30:44Z", "event": "phase_start", "phase": "archivist"}
+{"ts": "2026-03-14T12:30:44Z", "agent": "archivist", "action": "write_codebase_md", "method": "static", "confidence": 0.9, "output": "C:/Users/user/Documents/brownfield-cartographer/brownfield-cartographer/targets/Roo-Code/.cartography/CODEBASE.md"}
+{"ts": "2026-03-14T12:30:44Z", "agent": "archivist", "action": "write_onboarding_brief", "method": "static", "confidence": 0.9, "output": "C:/Users/user/Documents/brownfield-cartographer/brownfield-cartographer/targets/Roo-Code/.cartography/onboarding_brief.md"}
+{"ts": "2026-03-14T12:30:44Z", "agent": "archivist", "action": "write_trace", "method": "static", "confidence": 0.95, "output": "C:/Users/user/Documents/brownfield-cartographer/brownfield-cartographer/targets/Roo-Code/.cartography/cartography_trace.jsonl"}
