@@ -121,11 +121,16 @@ class Surveyor:
                     "_targets",
                     "_tmp",
                     "node_modules",
+                    "tests",
+                    "__tests__",
+                    "fixtures",
                 )
             ]
             for file in files:
                 file_path = Path(root) / file
                 ext = file_path.suffix.lower()
+                if any(part in {"tests", "__tests__", "fixtures"} for part in file_path.parts):
+                    continue
                 if ext not in {".py", ".sql", ".yml", ".yaml", ".js", ".jsx", ".ts", ".tsx"}:
                     continue
 

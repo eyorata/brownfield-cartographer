@@ -16,7 +16,7 @@ class LLMConfig(BaseModel):
     # Supports environment override via base_url_env. For LM Studio you can set:
     #   LMSTUDIO_API_BASE=http://192.168.6.233:1234/v1
     # and leave base_url_env as "LMSTUDIO_API_BASE".
-    base_url: str = Field(default="http://localhost:1234/v1")
+    base_url: str = Field(default="http://192.168.6.233:1234/v1")
     base_url_env: str = Field(default="LMSTUDIO_API_BASE")
 
     # API key can be set directly or sourced from an env var.
@@ -38,7 +38,7 @@ class LLMConfig(BaseModel):
     # Embeddings model for semantic index / vector search (can differ from chat models).
     embedding_model: str = Field(default="local-model")
     # Optional vision-capable model name (if your server supports images).
-    vision_model: str = Field(default_factory=lambda: os.environ.get("LMSTUDIO_VISION_MODEL", ""))
+    vision_model: str = Field(default="qwen3-vl-32b-instruct")
     max_total_tokens: int = Field(default=200_000, ge=1, le=10_000_000)
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     max_tokens: int = Field(default=900, ge=1, le=8192)

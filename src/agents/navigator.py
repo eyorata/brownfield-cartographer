@@ -434,7 +434,31 @@ class Navigator:
                 max_tokens=min(900, int(self.config.llm.max_tokens)),
                 response_format={"type": "json_object"},
             )
-            parsed = json.loads(out)
+            try:
+                parsed = json.loads(out)
+            except Exception:
+                # Some servers ignore response_format and return plain text.
+                # Fall back to a direct-answer prompt with no JSON/tooling requirement.
+                fb_sys = (
+                    "You are a Navigator agent for a codebase knowledge graph. "
+                    "Answer the user's question directly in plain text. "
+                    "If you are unsure, say so briefly and suggest a deterministic command (e.g., 'trace up <node> 6')."
+                )
+                fb_msgs: List[ChatMessage] = [ChatMessage(role="system", content=fb_sys)]
+                for m in state.get("messages", [])[-6:]:
+                    fb_msgs.append(ChatMessage(role=m.get("role", "user"), content=m.get("content", "")))
+                try:
+                    fb_out = self._llm.chat_completions(
+                        model=self.config.llm.model,
+                        messages=fb_msgs,
+                        temperature=min(0.4, float(self.config.llm.temperature)),
+                        max_tokens=min(600, int(self.config.llm.max_tokens)),
+                        response_format=None,
+                    )
+                    state["final"] = (fb_out or "").strip() or "LLM returned an empty response."
+                except Exception as e:
+                    state["final"] = f"LLM unavailable: {e}"
+                return state
         except Exception as e:
             state["final"] = f"LLM unavailable: {e}"
             return state

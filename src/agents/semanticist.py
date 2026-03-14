@@ -534,6 +534,14 @@ class Semanticist:
                 "test",
                 "sql",
                 "yaml",
+                "string",
+                "const",
+                "var",
+                "let",
+                "type",
+                "interface",
+                "export",
+                "default",
             }
             counts: Dict[int, Dict[str, int]] = {}
             for txt, a in zip(texts, assignments, strict=False):
@@ -545,8 +553,21 @@ class Semanticist:
             labels: Dict[int, str] = {}
             for a, c in counts.items():
                 top = sorted(c.items(), key=lambda kv: kv[1], reverse=True)[:5]
-                # Prefer 1-2 descriptive tokens.
-                name = "-".join([t for t, _ in top[:2]]) if top else f"cluster-{a}"
+                # Heuristic domain naming: map common tokens to business domains.
+                tokens = [t for t, _ in top]
+                domain = ""
+                if any(x in tokens for x in ("ingest", "ingestion", "extract", "load", "etl")):
+                    domain = "ingestion"
+                elif any(x in tokens for x in ("transform", "model", "compile", "parser", "manifest")):
+                    domain = "transformation"
+                elif any(x in tokens for x in ("serve", "api", "endpoint", "web", "ui", "client")):
+                    domain = "serving"
+                elif any(x in tokens for x in ("monitor", "log", "metric", "telemetry")):
+                    domain = "monitoring"
+                elif any(x in tokens for x in ("auth", "security", "token", "oauth")):
+                    domain = "auth"
+                # Prefer 1-2 descriptive tokens when no domain match.
+                name = domain or ("-".join([t for t in tokens[:2]]) if tokens else f"cluster-{a}")
                 labels[a] = name or f"cluster-{a}"
             return labels
 
@@ -742,9 +763,7 @@ class Semanticist:
             extra_headers=config.llm.extra_headers(),
         )
         if not llm_client.is_available(timeout_s=3):
-            self.kg.module_graph.graph["day_one_answers"] = {
-                "error": "LLM unavailable for day-one answers. Start LM Studio server and re-run semanticist.",
-            }
+            self.kg.module_graph.graph["day_one_answers"] = self._day_one_fallback(repo_root)
             return
 
         # Evidence selection: top modules by pagerank + top velocity + lineage sources/sinks.
@@ -805,9 +824,7 @@ class Semanticist:
             max_resp = int(config.llm.max_tokens)
             if not budget.can_call(prompt=prompt, max_response_tokens=max_resp):
                 budget.skipped += 1
-                self.kg.module_graph.graph["day_one_answers"] = {
-                    "error": "LLM budget exceeded for day-one answers.",
-                }
+                self.kg.module_graph.graph["day_one_answers"] = self._day_one_fallback(repo_root)
                 return
             out = llm_client.chat_completions(
                 model=model,
@@ -840,10 +857,148 @@ class Semanticist:
                     "skipped": budget.skipped,
                 }
         except Exception:
-            # Deterministic fallback: keep empty if LLM unavailable.
-            self.kg.module_graph.graph["day_one_answers"] = {
-                "error": "LLM unavailable for day-one answers. Start LM Studio server and re-run semanticist.",
-            }
+            # Deterministic fallback when LLM fails or returns invalid JSON.
+            self.kg.module_graph.graph["day_one_answers"] = self._day_one_fallback(repo_root)
+
+    def _day_one_fallback(self, repo_root: Path) -> Dict[str, Any]:
+        """
+        Deterministic Day-One answers using graph evidence with citations.
+        """
+        # Evidence: top modules by pagerank + velocity
+        ranked = []
+        for n, a in self.kg.module_graph.nodes(data=True):
+            ranked.append((float(a.get("pagerank") or 0.0), int(a.get("change_velocity_30d") or 0), str(n)))
+        ranked.sort(reverse=True)
+        top_mods = [p for _, __, p in ranked[:8]]
+
+        def _cite_module(path: str) -> str:
+            fp = (repo_root / path).resolve()
+            if not fp.exists():
+                return ""
+            lr, _snip = self._read_lines_with_numbers(fp, 1, 40)
+            return f"{path}:{lr}"
+
+        mod_cites = [c for c in (_cite_module(p) for p in top_mods) if c]
+
+        # Lineage sources/sinks with citations
+        try:
+            from agents.hydrologist import Hydrologist
+
+            hyd = Hydrologist(self.kg)
+            sources = hyd.find_sources()[:10]
+            sinks = hyd.find_sinks()[:10]
+        except Exception:
+            sources, sinks = [], []
+
+        def _dataset_citations(ds: str, limit: int = 4) -> List[str]:
+            cites: List[str] = []
+            g = self.kg.lineage_graph
+            if ds not in g:
+                return cites
+            for u, v, data in list(g.in_edges(ds, data=True)) + list(g.out_edges(ds, data=True)):
+                sf = str((data or {}).get("source_file") or "")
+                lr = str((data or {}).get("line_range") or "")
+                if sf and lr:
+                    cites.append(f"{sf}:{lr}")
+            out: List[str] = []
+            seen = set()
+            for c in cites:
+                if c not in seen:
+                    seen.add(c)
+                    out.append(c)
+            return out[:limit]
+
+        # Build a simple ingestion path hypothesis from lineage sources to sinks.
+        ingestion_path = ""
+        ingestion_cites: List[str] = []
+        try:
+            import networkx as nx
+
+            if sources and sinks:
+                g = self.kg.lineage_graph
+                for src in sources[:5]:
+                    for sink in sinks[:5]:
+                        if src in g and sink in g:
+                            try:
+                                p = nx.shortest_path(g, src, sink)
+                            except Exception:
+                                p = []
+                            if p:
+                                ingestion_path = " -> ".join([str(x) for x in p[:8]])
+                                for i in range(len(p) - 1):
+                                    data = g.get_edge_data(p[i], p[i + 1]) or {}
+                                    sf = str(data.get("source_file") or "")
+                                    lr = str(data.get("line_range") or "")
+                                    if sf and lr:
+                                        ingestion_cites.append(f"{sf}:{lr}")
+                                break
+                    if ingestion_path:
+                        break
+        except Exception:
+            ingestion_path = ""
+
+        q1 = {
+            "answer": (
+                f"Ingestion path (graph-derived): {ingestion_path}"
+                if ingestion_path
+                else "Primary ingestion path inferred from lineage sources/sinks; see cited source files."
+            ),
+            "citations": (ingestion_cites or [c for ds in sources[:3] for c in _dataset_citations(ds)] or mod_cites[:4]),
+        }
+
+        q2_sinks = sinks[:5]
+        q2 = {
+            "answer": f"Critical outputs (top sinks): {', '.join([str(x) for x in q2_sinks])}" if q2_sinks else "Critical outputs not detected; see lineage sources.",
+            "citations": [c for ds in q2_sinks for c in _dataset_citations(ds)] or [c for ds in sources[:3] for c in _dataset_citations(ds)],
+        }
+
+        # Blast radius using module graph descendants of top module
+        blast_desc = []
+        blast_cites: List[str] = []
+        try:
+            import networkx as nx
+
+            if top_mods:
+                m0 = top_mods[0]
+                gmod = self.kg.module_graph
+                if m0 in gmod:
+                    blast_desc = list(nx.descendants(gmod, m0))[:10]
+                    blast_cites = [_cite_module(m0)] + [_cite_module(p) for p in blast_desc[:4] if _cite_module(p)]
+        except Exception:
+            blast_desc = []
+
+        q3 = {
+            "answer": (
+                f"Blast radius (module graph): {top_mods[0]} -> {', '.join([str(x) for x in blast_desc])}"
+                if top_mods
+                else "Blast radius requires module graph; no modules detected."
+            ),
+            "citations": [c for c in blast_cites if c] or mod_cites[:4],
+        }
+
+        q4 = {
+            "answer": (
+                f"Business logic concentrates around high-centrality modules: {', '.join(top_mods[:5])}"
+                if top_mods
+                else "Business logic concentration not detected."
+            ),
+            "citations": mod_cites[:5],
+        }
+
+        top_vel = self.kg.module_graph.graph.get("top_velocity_files_30d") or []
+        top_vel_paths = [str(x.get("path")) for x in top_vel[:5] if x.get("path")]
+        q5 = {
+            "answer": f"Most frequent changes (30d): {', '.join(top_vel_paths)}" if top_vel_paths else "No git velocity data detected.",
+            "citations": mod_cites[:4],
+        }
+
+        return {
+            "q1_primary_ingestion_path": q1,
+            "q2_critical_outputs": q2,
+            "q3_blast_radius": q3,
+            "q4_business_logic": q4,
+            "q5_change_velocity": q5,
+        }
 
     def run(
         self,

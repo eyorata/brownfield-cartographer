@@ -1,0 +1,22 @@
+llm:
+  # Disable LLM calls by pointing to a non-routable base and empty model names.
+  base_url: "http://127.0.0.1:9/v1"
+  api_key: ""
+  model: "local-model"
+  cheap_model: "local-model"
+  expensive_model: "local-model"
+  embedding_model: "local-model"
+
+semanticist:
+  enabled: false
+  doc_drift_detection: false
+  day_one_answers: false
+  semantic_index: false
+  semantic_index_symbols: false
+
+navigator:
+  use_langgraph: false
+  citations: true
+
+incremental:
+  enabled: false

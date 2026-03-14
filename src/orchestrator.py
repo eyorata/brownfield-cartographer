@@ -98,6 +98,22 @@ class Orchestrator:
         
         # If incremental, load previous graphs from target output and prune affected nodes/edges.
         target_out = repo_root / ".cartography"
+        extra_out = None
+        if output_dir is not None:
+            extra_out = Path(output_dir).expanduser().resolve()
+
+        out_dirs = [target_out]
+        if extra_out and extra_out != target_out:
+            out_dirs.append(extra_out)
+
+        def _write_trace_incremental() -> None:
+            # Write trace during long-running analyses so UIs can show progress.
+            for od in out_dirs:
+                try:
+                    od.mkdir(parents=True, exist_ok=True)
+                    self.archivist.write_trace(od, trace)
+                except Exception:
+                    pass
         if incremental:
             try:
                 self.kg.load_from_dir(target_out)
@@ -113,6 +129,7 @@ class Orchestrator:
             trace.append({"ts": self._utc_now(), "event": "phase_start", "phase": "surveyor"})
             self.surveyor.analyze(repo_root, only_files=changed_files, trace=trace)
             trace.append({"ts": self._utc_now(), "event": "phase_end", "phase": "surveyor"})
+            _write_trace_incremental()
             # Preserve partial results in case a later phase fails.
             target_out.mkdir(exist_ok=True, parents=True)
             self.kg.serialize_module_graph(target_out / "module_graph.json")
@@ -122,6 +139,7 @@ class Orchestrator:
             trace.append({"ts": self._utc_now(), "event": "phase_start", "phase": "hydrologist"})
             self.hydrologist.analyze(repo_root, only_files=changed_files, trace=trace)
             trace.append({"ts": self._utc_now(), "event": "phase_end", "phase": "hydrologist"})
+            _write_trace_incremental()
             target_out.mkdir(exist_ok=True, parents=True)
             self.kg.serialize_lineage_graph(target_out / "lineage_graph.json")
 
@@ -130,6 +148,7 @@ class Orchestrator:
             trace.append({"ts": self._utc_now(), "event": "phase_start", "phase": "semanticist"})
             self.semanticist.run(repo_root, config=config, trace=trace, output_dir=target_out, only_files=changed_files)
             trace.append({"ts": self._utc_now(), "event": "phase_end", "phase": "semanticist"})
+            _write_trace_incremental()
             target_out.mkdir(exist_ok=True, parents=True)
             self.kg.serialize_module_graph(target_out / "module_graph.json")
 
@@ -141,9 +160,7 @@ class Orchestrator:
         self.kg.serialize_lineage_graph(target_out / "lineage_graph.json")
 
         # Optionally also write a copy somewhere else (e.g. this tool repo's `.cartography/`).
-        extra_out = None
-        if output_dir is not None:
-            extra_out = Path(output_dir).expanduser().resolve()
+        if extra_out is not None:
             extra_out.mkdir(exist_ok=True, parents=True)
             if extra_out != target_out:
                 self.kg.serialize_module_graph(extra_out / "module_graph.json")
@@ -157,10 +174,6 @@ class Orchestrator:
                     pass
 
         # Archivist Phase (writes markdown context + trace)
-        out_dirs = [target_out]
-        if extra_out and extra_out != target_out:
-            out_dirs.append(extra_out)
-
         if "archivist" in phases:
             trace.append({"ts": self._utc_now(), "event": "phase_start", "phase": "archivist"})
             for od in out_dirs:

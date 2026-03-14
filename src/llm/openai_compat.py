@@ -7,6 +7,14 @@ from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+try:
+    from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+except Exception:
+    ChatOpenAI = None
+    OpenAIEmbeddings = None
+    AIMessage = HumanMessage = SystemMessage = None
+
 
 @dataclass(frozen=True)
 class ChatMessage:
@@ -63,17 +71,30 @@ class OpenAICompatClient:
         response_format: Optional[Dict[str, Any]] = None,
         retries: int = 2,
     ) -> str:
-        url = f"{self.base_url}/chat/completions"
-        payload: Dict[str, Any] = {
-            "model": model,
-            "messages": [{"role": m.role, "content": m.content} for m in messages],
-            "temperature": float(temperature),
-            "max_tokens": int(max_tokens),
-        }
-        if response_format is not None:
-            payload["response_format"] = response_format
+        # Prefer LangChain wrapper when available (better compatibility with LM Studio).
+        if ChatOpenAI is not None and AIMessage is not None:
+            lc_msgs = []
+            for m in messages:
+                role = (m.role or "").lower()
+                if role == "system":
+                    lc_msgs.append(SystemMessage(content=m.content))
+                elif role == "assistant":
+                    lc_msgs.append(AIMessage(content=m.content))
+                else:
+                    lc_msgs.append(HumanMessage(content=m.content))
+            api_key = self.api_key or "lmstudio"
+            llm = ChatOpenAI(
+                model=model,
+                base_url=self.base_url,
+                api_key=api_key,
+                temperature=float(temperature),
+                max_tokens=int(max_tokens),
+                timeout=self.timeout_s,
+            )
+            out = llm.invoke(lc_msgs)
+            return str(getattr(out, "content", "") or "")
 
-        data = json.dumps(payload).encode("utf-8")
+        url = f"{self.base_url}/chat/completions"
         headers = {
             "Content-Type": "application/json",
         }
@@ -82,15 +103,35 @@ class OpenAICompatClient:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
         last_err: Exception | None = None
+        allow_response_format = response_format is not None
         for attempt in range(retries + 1):
             try:
+                payload: Dict[str, Any] = {
+                    "model": model,
+                    "messages": [{"role": m.role, "content": m.content} for m in messages],
+                    "temperature": float(temperature),
+                    "max_tokens": int(max_tokens),
+                }
+                if allow_response_format and response_format is not None:
+                    payload["response_format"] = response_format
+                data = json.dumps(payload).encode("utf-8")
                 req = Request(url=url, data=data, headers=headers, method="POST")
                 with urlopen(req, timeout=self.timeout_s) as resp:
                     body = resp.read().decode("utf-8", errors="ignore")
                 out = json.loads(body)
                 # OpenAI style: choices[0].message.content
                 return str(out["choices"][0]["message"]["content"])
-            except (HTTPError, URLError, TimeoutError, KeyError, ValueError) as e:
+            except HTTPError as e:
+                last_err = e
+                # Some OpenAI-compatible servers (e.g., LM Studio) do not support response_format.
+                if allow_response_format:
+                    allow_response_format = False
+                    continue
+                if attempt < retries:
+                    time.sleep(0.4 * (attempt + 1))
+                    continue
+                raise
+            except (URLError, TimeoutError, KeyError, ValueError) as e:
                 last_err = e
                 if attempt < retries:
                     time.sleep(0.4 * (attempt + 1))
@@ -111,6 +152,15 @@ class OpenAICompatClient:
         Works with servers that expose POST /embeddings (including many local OpenAI-compatible APIs).
         Returns one embedding per input string.
         """
+        if OpenAIEmbeddings is not None:
+            api_key = self.api_key or "lmstudio"
+            emb = OpenAIEmbeddings(
+                model=model,
+                openai_api_base=self.base_url,
+                openai_api_key=api_key,
+            )
+            return emb.embed_documents(inputs)
+
         url = f"{self.base_url}/embeddings"
         payload: Dict[str, Any] = {
             "model": model,

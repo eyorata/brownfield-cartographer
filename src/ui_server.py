@@ -322,6 +322,32 @@ def _list_ui_runs(limit: int = 50) -> List[Dict[str, Any]]:
     return items
 
 
+def _load_kg_from_dir(base_dir: Path):
+    from graph.knowledge_graph import KnowledgeGraph
+
+    kg = KnowledgeGraph()
+    kg.load_from_dir(base_dir)
+    return kg
+
+
+def _trace_lineage(base_dir: Path, *, node: str, direction: str = "up", max_depth: int = 6) -> Dict[str, Any]:
+    from agents.navigator import Navigator
+    from config import CartographyConfig
+
+    kg = _load_kg_from_dir(base_dir)
+    nav = Navigator(kg, repo_root=None, config=CartographyConfig(), graph_dir=base_dir)
+    return nav.trace_lineage_tool(node=node, direction=direction, max_depth=max_depth)
+
+
+def _blast_radius(base_dir: Path, *, node: str) -> Dict[str, Any]:
+    from agents.navigator import Navigator
+    from config import CartographyConfig
+
+    kg = _load_kg_from_dir(base_dir)
+    nav = Navigator(kg, repo_root=None, config=CartographyConfig(), graph_dir=base_dir)
+    return nav.blast_radius_tool(node)
+
+
 def _run_analyze_job(job_id: str) -> None:
     job = JOBS.get(job_id)
     if not job:
@@ -331,7 +357,7 @@ def _run_analyze_job(job_id: str) -> None:
     log_path = Path(job["log_path"]).resolve()
 
     py = _pick_python()
-    cmd = [py, str((_ROOT / "src" / "cli.py").resolve()), "analyze", job["requested_path"], "--output-dir", str(out_dir)]
+    cmd = [py, "-u", str((_ROOT / "src" / "cli.py").resolve()), "analyze", job["requested_path"], "--output-dir", str(out_dir)]
 
     JOBS.update(job_id, status="running", started_at=time.time())
 
@@ -342,6 +368,8 @@ def _run_analyze_job(job_id: str) -> None:
             lf.write(" ".join(cmd) + "\n\n")
             lf.flush()
 
+            env = dict(os.environ)
+            env["PYTHONUNBUFFERED"] = "1"
             proc = subprocess.Popen(
                 cmd,
                 cwd=str(_ROOT),
@@ -349,6 +377,7 @@ def _run_analyze_job(job_id: str) -> None:
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                env=env,
             )
 
             assert proc.stdout is not None
@@ -539,6 +568,17 @@ _INDEX_HTML = """<!doctype html>
           <div style="height:10px;"></div>
           <pre id="art_preview">(select an artifact)</pre>
         </section>
+        <section class="card">
+          <h2>Queries</h2>
+          <label>Dataset or module node</label>
+          <input id="q_node" type="text" placeholder="e.g. runs  OR  apps/cli/src/agent/agent-state.ts" />
+          <div class="row" style="margin-top:8px;">
+            <button id="q_trace_up">Trace Upstream</button>
+            <button id="q_blast">Blast Radius</button>
+          </div>
+          <div style="height:10px;"></div>
+          <pre id="q_out">(results will appear here)</pre>
+        </section>
       </section>
     </main>
     <script>
@@ -552,6 +592,10 @@ _INDEX_HTML = """<!doctype html>
       const viewsEl = document.getElementById('views');
       const artListEl = document.getElementById('art_list');
       const artPrevEl = document.getElementById('art_preview');
+      const qNodeEl = document.getElementById('q_node');
+      const qOutEl = document.getElementById('q_out');
+      const qTraceUpBtn = document.getElementById('q_trace_up');
+      const qBlastBtn = document.getElementById('q_blast');
       const phaseDots = {
         surveyor: document.getElementById('p_surveyor'),
         hydrologist: document.getElementById('p_hydrologist'),
@@ -605,6 +649,9 @@ _INDEX_HTML = """<!doctype html>
         const data = await resp.json();
         setStatus(data.status);
         logEl.textContent = data.log || '';
+        if (data.duration_s && data.status === 'done') {
+          jobMeta.textContent = `job ${currentJob} • ${data.duration_s.toFixed(2)}s`;
+        }
         if (data.phases) {
           for (const [ph, dot] of Object.entries(phaseDots)) {
             const st = (data.phases[ph] && data.phases[ph].status) ? data.phases[ph].status : 'idle';
@@ -668,6 +715,52 @@ _INDEX_HTML = """<!doctype html>
       });
 
       runBtn.addEventListener('click', start);
+
+      async function runTraceUp() {
+        if (!currentJob) { qOutEl.textContent = 'Run an analysis first.'; return; }
+        const node = (qNodeEl.value || '').trim();
+        if (!node) { qOutEl.textContent = 'Enter a dataset or node.'; return; }
+        qOutEl.textContent = 'Loading...';
+        const resp = await fetch(`/api/trace?id=${encodeURIComponent(currentJob)}&node=${encodeURIComponent(node)}&direction=up&max_depth=6`);
+        const data = await resp.json();
+        if (data.error) { qOutEl.textContent = data.error; return; }
+        const paths = data.result || [];
+        const cites = data.citations || [];
+        let out = `Paths (${paths.length}):\n`;
+        for (const p of paths.slice(0, 12)) {
+          if (Array.isArray(p)) out += `- ${p.join(' -> ')}\n`;
+        }
+        if (cites.length) {
+          out += `\nCitations:\n`;
+          for (const c of cites.slice(0, 20)) out += `- ${c}\n`;
+        }
+        qOutEl.textContent = out.trim() || '(no paths found)';
+      }
+
+      async function runBlast() {
+        if (!currentJob) { qOutEl.textContent = 'Run an analysis first.'; return; }
+        const node = (qNodeEl.value || '').trim();
+        if (!node) { qOutEl.textContent = 'Enter a dataset or module path.'; return; }
+        qOutEl.textContent = 'Loading...';
+        const resp = await fetch(`/api/blast?id=${encodeURIComponent(currentJob)}&node=${encodeURIComponent(node)}`);
+        const data = await resp.json();
+        if (data.error) { qOutEl.textContent = data.error; return; }
+        const impacted = data.result || [];
+        const cites = data.citations || [];
+        let out = `Impacted (${impacted.length}):\n`;
+        for (const it of impacted.slice(0, 12)) {
+          const p = it.path || [];
+          if (Array.isArray(p)) out += `- ${p.join(' -> ')}\n`;
+        }
+        if (cites.length) {
+          out += `\nCitations:\n`;
+          for (const c of cites.slice(0, 20)) out += `- ${c}\n`;
+        }
+        qOutEl.textContent = out.trim() || '(no impacted nodes)';
+      }
+
+      qTraceUpBtn.addEventListener('click', runTraceUp);
+      qBlastBtn.addEventListener('click', runBlast);
     </script>
   </body>
 </html>
@@ -1011,6 +1104,11 @@ class Handler(BaseHTTPRequestHandler):
                     "status": job["status"],
                     "exit_code": job.get("exit_code"),
                     "error": job.get("error"),
+                    "started_at": job.get("started_at"),
+                    "ended_at": job.get("ended_at"),
+                    "duration_s": (float(job.get("ended_at") or 0) - float(job.get("started_at") or 0))
+                    if job.get("started_at") and job.get("ended_at")
+                    else None,
                     "output_dir": str(out_dir),
                     "log": log,
                     "phases": trace_info.get("phases"),
@@ -1077,6 +1175,48 @@ class Handler(BaseHTTPRequestHandler):
                 trimmed["meta"]["file"] = str(fp)
                 trimmed["meta"]["type"] = gtype
                 self._send_json(trimmed, status=200)
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+            return
+
+        if parsed.path == "/api/trace":
+            qs = parse_qs(parsed.query or "")
+            job_id = (qs.get("id") or [""])[0]
+            node = (qs.get("node") or [""])[0]
+            direction = ((qs.get("direction") or ["up"])[0] or "up").lower()
+            try:
+                max_depth = int((qs.get("max_depth") or ["6"])[0])
+            except Exception:
+                max_depth = 6
+
+            base_dir = _safe_run_dir_from_id(job_id) if job_id else None
+            if base_dir is None:
+                self._send_json({"error": "invalid run id"}, status=400)
+                return
+            if not node:
+                self._send_json({"error": "missing node"}, status=400)
+                return
+            try:
+                result = _trace_lineage(base_dir, node=node, direction=direction, max_depth=max_depth)
+                self._send_json(result, status=200)
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+            return
+
+        if parsed.path == "/api/blast":
+            qs = parse_qs(parsed.query or "")
+            job_id = (qs.get("id") or [""])[0]
+            node = (qs.get("node") or [""])[0]
+            base_dir = _safe_run_dir_from_id(job_id) if job_id else None
+            if base_dir is None:
+                self._send_json({"error": "invalid run id"}, status=400)
+                return
+            if not node:
+                self._send_json({"error": "missing node"}, status=400)
+                return
+            try:
+                result = _blast_radius(base_dir, node=node)
+                self._send_json(result, status=200)
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
             return

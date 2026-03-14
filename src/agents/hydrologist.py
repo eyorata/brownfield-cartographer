@@ -70,11 +70,16 @@ class Hydrologist:
                     "_targets",
                     "_tmp",
                     "node_modules",
+                    "tests",
+                    "__tests__",
+                    "fixtures",
                 )
             ]
             for file in files:
                 file_path = Path(root) / file
                 rel_path = str(file_path.relative_to(base_path)).replace("\\", "/")
+                if any(part in {"tests", "__tests__", "fixtures"} for part in file_path.parts):
+                    continue
                 if only_files_norm is not None and rel_path not in only_files_norm:
                     continue
                 

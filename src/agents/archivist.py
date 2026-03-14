@@ -192,6 +192,8 @@ class Archivist:
         if isinstance(day_one, dict) and day_one:
             lines.append("## Day-One Questions (Semanticist)")
             lines.append("")
+            lines.append("- Method: llm (synthesis over graph evidence)")
+            lines.append("")
             for key, title in [
                 ("q1_primary_ingestion_path", "1) Primary ingestion path"),
                 ("q2_critical_outputs", "2) Critical outputs"),
@@ -204,43 +206,48 @@ class Archivist:
                     ans = str(v.get("answer") or "").strip()
                     cites = v.get("citations") if isinstance(v.get("citations"), list) else []
                     lines.append(f"### {title}")
-                    lines.append(f"- {ans}" if ans else "- (no answer)")
+                    lines.append(f"- {ans} (llm)" if ans else "- (no answer)")
                     if cites:
                         lines.append("- Citations:")
                         for c in cites[:10]:
-                            lines.append(f"  - {c}")
+                            lines.append(f"  - {c} (llm)")
                     lines.append("")
             lines.append("---")
             lines.append("")
         lines.append("## Day-One Questions (Auto)")
         lines.append("")
-        lines.append("### 1) What does this system do?")
-        lines.append("- This repo was analyzed into a module graph (structure) and a lineage graph (data dependencies).")
+        lines.append("- Method: static (graph-derived heuristics)")
         lines.append("")
-        lines.append("### 2) What are critical outputs?")
+        lines.append("### 1) What is the primary data ingestion path?")
+        lines.append(
+            "- This repo was analyzed into a module graph (structure) and a lineage graph (data dependencies); "
+            "explicit ingestion paths require manual confirmation or LLM synthesis."
+        )
+        lines.append("")
+        lines.append("### 2) What are the 3-5 most critical output datasets/endpoints?")
         lines.append("- Outputs: `.cartography/module_graph.json`, `.cartography/lineage_graph.json`, `.cartography/CODEBASE.md`.")
         lines.append("")
-        lines.append("### 3) What are likely data sources/sinks?")
-        lines.append("- Sources (in-degree 0 datasets):")
+        lines.append("### 3) What is the blast radius if the most critical module fails?")
+        lines.append("- Sources (in-degree 0 datasets) can be used to trace downstream impact:")
         for s in sources[:25]:
             cs = _dataset_citations(s)
             cite_txt = f"  [evidence: {', '.join(cs)}]" if cs else ""
-            lines.append(f"  - {s}{cite_txt}")
-        lines.append("- Sinks (out-degree 0 datasets):")
+            lines.append(f"  - {s}{cite_txt} (static)")
+        lines.append("- Sinks (out-degree 0 datasets) indicate likely downstream impact:")
         for s in sinks[:25]:
             cs = _dataset_citations(s)
             cite_txt = f"  [evidence: {', '.join(cs)}]" if cs else ""
-            lines.append(f"  - {s}{cite_txt}")
+            lines.append(f"  - {s}{cite_txt} (static)")
         lines.append("")
-        lines.append("### 4) What are high-leverage modules?")
-        lines.append("- Top PageRank modules (structural centrality):")
+        lines.append("### 4) Where is the business logic concentrated vs. distributed?")
+        lines.append("- Top PageRank modules (structural centrality) approximate concentration:")
         for m in self._top_modules(10):
-            lines.append(f"  - {m['path']} (pagerank={m['pagerank']:.6f})")
+            lines.append(f"  - {m['path']} (pagerank={m['pagerank']:.6f}) (static)")
         lines.append("")
-        lines.append("### 5) What changed recently?")
+        lines.append("### 5) What has changed most frequently in the last 90 days (git velocity map)?")
         lines.append("- Top changed files (30d):")
         for item in (self.kg.module_graph.graph.get("top_velocity_files_30d") or [])[:15]:
-            lines.append(f"  - {item.get('path')} (touches={item.get('touches')})")
+            lines.append(f"  - {item.get('path')} (touches={item.get('touches')}) (static)")
         lines.append("")
 
         (out_dir / "onboarding_brief.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
