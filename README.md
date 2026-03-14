@@ -51,6 +51,8 @@ Optionally also write a second copy of artifacts elsewhere (useful for committin
 ./.venv/Scripts/python.exe src/cli.py analyze .\\_targets\\dbt-core --output-dir .\\.cartography
 ```
 
+If you use the UI, each run is stored under `.cartography/ui_runs/<run_id>/` with the same artifact set.
+
 ### Query the Knowledge Graph
 Once analysis is complete, you can interact with the graph.
 
