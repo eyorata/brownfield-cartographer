@@ -31,6 +31,9 @@ This tool speaks to any OpenAI-compatible API.
 - Set `llm.base_url` to your provider’s base URL (e.g. OpenRouter: `https://openrouter.ai/api/v1`)
 - Provide the API key either directly in `cartography_config.yaml` (`llm.api_key`) or via an env var:
   - `llm.api_key_env: "OPENROUTER_API_KEY"` and set `OPENROUTER_API_KEY=...`
+- For env indirection (recommended for secrets), set `llm.api_key_env: "LMSTUDIO_API_KEY_ENV"` and then:
+  - `LMSTUDIO_API_KEY_ENV=LMSTUDIO_API_KEY`
+  - `LMSTUDIO_API_KEY=...`
 - (Optional) OpenRouter attribution headers:
   - `llm.app_url` and `llm.app_name`
 
@@ -75,6 +78,12 @@ Example interactive commands:
 
 ```bash
 ./.venv/Scripts/python.exe src/cli.py serve --host 127.0.0.1 --port 8000
+```
+
+### Run the Rubric Demo (Steps 1–6)
+
+```bash
+./.venv/Scripts/python.exe src/cli.py demo /path/to/your/repo --dataset <dataset_name> --module <relative/module.py>
 ```
 
 ## Structure

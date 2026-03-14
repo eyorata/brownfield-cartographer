@@ -8,7 +8,8 @@ llm:
   base_url: "http://localhost:1234/v1"
   base_url_env: "LMSTUDIO_API_BASE"
   api_key: ""
-  api_key_env: "LMSTUDIO_API_KEY"
+  # Reads LMSTUDIO_API_KEY_ENV and then reads that env var for the real secret.
+  api_key_env: "LMSTUDIO_API_KEY_ENV"
   # Set this to the exact model name shown in LM Studio (Model tab / server logs).
   model: "local-model"
   # Cost-conscious model selection:

@@ -13,13 +13,18 @@ class LLMConfig(BaseModel):
     provider: str = Field(default="lmstudio")  # lmstudio | openrouter | openai_compat | other
 
     # Base URL of the OpenAI-compatible API (e.g. LM Studio, OpenRouter).
-    # Supports environment override via LMSTUDIO_API_BASE or base_url_env.
+    # Supports environment override via base_url_env. For LM Studio you can set:
+    #   LMSTUDIO_API_BASE=http://192.168.6.233:1234/v1
+    # and leave base_url_env as "LMSTUDIO_API_BASE".
     base_url: str = Field(default="http://localhost:1234/v1")
     base_url_env: str = Field(default="LMSTUDIO_API_BASE")
 
-    # API key can be set directly or sourced from an env var name.
+    # API key can be set directly or sourced from an env var.
+    # Supports env indirection (recommended for secrets):
+    #   LMSTUDIO_API_KEY_ENV=LMSTUDIO_API_KEY
+    #   LMSTUDIO_API_KEY=... (actual secret value)
     api_key: str = Field(default="")
-    api_key_env: str = Field(default_factory=lambda: os.environ.get("LMSTUDIO_API_KEY_ENV", ""))
+    api_key_env: str = Field(default="LMSTUDIO_API_KEY_ENV")
 
     # Optional OpenRouter-style attribution headers (also useful for other paid gateways).
     app_url: str = Field(default_factory=lambda: os.environ.get("OPENROUTER_APP_URL", ""))
@@ -39,16 +44,48 @@ class LLMConfig(BaseModel):
     max_tokens: int = Field(default=900, ge=1, le=8192)
     timeout_s: int = Field(default=90, ge=1, le=600)
 
+    @staticmethod
+    def _looks_like_env_var_name(value: str) -> bool:
+        s = (value or "").strip()
+        if not s:
+            return False
+        if len(s) > 120:
+            return False
+        if not ("A" <= s[0] <= "Z"):
+            return False
+        for ch in s:
+            if not (("A" <= ch <= "Z") or ("0" <= ch <= "9") or ch == "_"):
+                return False
+        return True
+
+    def _resolve_env_value(self, env_name: str) -> str:
+        """
+        Resolve env values with one level of indirection:
+        - If env_name points to a value like "SOME_SECRET_ENV" and that env var exists,
+          return the value of SOME_SECRET_ENV.
+        - Otherwise, return the value of env_name.
+        """
+        name = (env_name or "").strip()
+        if not name:
+            return ""
+        first = str(os.environ.get(name, "") or "")
+        if not first:
+            return ""
+        candidate = first.strip()
+        if (
+            self._looks_like_env_var_name(candidate)
+            and candidate != name
+            and os.environ.get(candidate) is not None
+        ):
+            return str(os.environ.get(candidate, "") or "")
+        return first
+
     def resolved_base_url(self) -> str:
         env_name = (self.base_url_env or "").strip()
         if env_name:
-            v = os.environ.get(env_name)
+            v = self._resolve_env_value(env_name)
             if v:
                 return str(v).rstrip("/")
-        # Back-compat: accept LMSTUDIO_API_BASE directly if present.
-        v2 = os.environ.get("LMSTUDIO_API_BASE")
-        if v2:
-            return str(v2).rstrip("/")
         return str(self.base_url).rstrip("/")
 
     def resolved_api_key(self) -> str:
@@ -56,7 +93,17 @@ class LLMConfig(BaseModel):
             return str(self.api_key)
         env_name = (self.api_key_env or "").strip()
         if env_name:
-            return str(os.environ.get(env_name, ""))
+            v = self._resolve_env_value(env_name)
+            if v:
+                return str(v)
+
+        # Provider-friendly fallbacks.
+        if self.provider == "openrouter":
+            return str(os.environ.get("OPENROUTER_API_KEY", "") or "")
+        if self.provider == "openai_compat":
+            return str(os.environ.get("OPENAI_API_KEY", "") or "")
+        if self.provider == "lmstudio":
+            return str(os.environ.get("LMSTUDIO_API_KEY", "") or "")
         return ""
 
     def resolved_embedding_model(self) -> str:

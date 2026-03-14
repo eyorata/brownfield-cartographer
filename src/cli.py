@@ -115,6 +115,18 @@ def main():
     serve_parser.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")
     serve_parser.add_argument("--config", default=None, help="Path to cartography_config.yaml (optional)")
 
+    demo_parser = subparsers.add_parser("demo", help="Run a scripted demo (timed cold start + queries)")
+    demo_parser.add_argument("path", help="Path to a local repository or GitHub URL")
+    demo_parser.add_argument("--config", default=None, help="Path to cartography_config.yaml (optional)")
+    demo_parser.add_argument("--output-dir", default=None, help="Optional extra directory to also write artifacts")
+    demo_parser.add_argument("--dataset", default=None, help="Dataset name for lineage query (optional)")
+    demo_parser.add_argument("--module", default=None, help="Module path for blast radius (optional)")
+    demo_parser.add_argument(
+        "--notes",
+        default=None,
+        help="Optional path to ARCHITECTURE_NOTES.md for self-audit (Step 6). Defaults to <repo>/ARCHITECTURE_NOTES.md if present.",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -261,6 +273,26 @@ def main():
         from ui_server import serve
 
         serve(host=args.host, port=args.port)
+    elif args.command == "demo":
+        repo_path_value = args.path
+        if _is_git_url(repo_path_value):
+            repo_path = _clone_github_repo(repo_path_value, Path(".cartography") / "_repos")
+        else:
+            repo_path = Path(repo_path_value)
+        _require_runtime_deps()
+        from config import load_config
+        from demo import run_demo
+
+        cfg = load_config(args.config)
+        out_dir = Path(args.output_dir).resolve() if args.output_dir else None
+        run_demo(
+            repo_path=Path(repo_path).resolve(),
+            config=cfg,
+            output_dir=out_dir,
+            dataset=args.dataset,
+            module_path=args.module,
+            notes_path=Path(args.notes).resolve() if args.notes else None,
+        )
 
 if __name__ == "__main__":
     main()
