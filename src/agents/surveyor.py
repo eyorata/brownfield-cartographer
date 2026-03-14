@@ -126,7 +126,7 @@ class Surveyor:
             for file in files:
                 file_path = Path(root) / file
                 ext = file_path.suffix.lower()
-                if ext not in {".py", ".sql", ".yml", ".yaml"}:
+                if ext not in {".py", ".sql", ".yml", ".yaml", ".js", ".jsx", ".ts", ".tsx"}:
                     continue
 
                 rel_path = str(file_path.relative_to(base_path)).replace("\\", "/")
@@ -137,6 +137,10 @@ class Surveyor:
                     ".sql": "sql",
                     ".yml": "yaml",
                     ".yaml": "yaml",
+                    ".js": "javascript",
+                    ".jsx": "javascript",
+                    ".ts": "typescript",
+                    ".tsx": "typescript",
                 }.get(ext, ext.lstrip("."))
 
                 data: Dict[str, Any] = {}
@@ -150,6 +154,15 @@ class Surveyor:
                     public_symbol_count = len([n for n in data.get("functions", []) if not str(n).startswith("_")]) + len(
                         [n for n in data.get("classes", []) if not str(n).startswith("_")]
                     )
+                elif ext in {".js", ".jsx", ".ts", ".tsx"}:
+                    try:
+                        if ext in {".ts", ".tsx"}:
+                            data = self.analyzer.parse_typescript(str(file_path))
+                        else:
+                            data = self.analyzer.parse_javascript(str(file_path))
+                    except Exception as e:
+                        print(f"Failed to analyze js/ts module {file_path}: {e}")
+                        data = {}
 
                 module_exports[rel_path] = public_symbol_count
 
@@ -165,12 +178,13 @@ class Surveyor:
 
                 # Attach analyzer-derived structure for downstream agents (Semanticist/Navigator).
                 # Keep this lightweight and schema-adjacent (stored as node attrs, not in ModuleNode schema).
-                if ext == ".py" and data:
+                if ext in {".py", ".js", ".jsx", ".ts", ".tsx"} and data:
                     try:
-                        self.kg.module_graph.nodes[rel_path]["function_defs"] = data.get("function_defs") or []
-                        self.kg.module_graph.nodes[rel_path]["class_defs"] = data.get("class_defs") or []
-                        self.kg.module_graph.nodes[rel_path]["data_ops"] = data.get("data_ops") or []
                         self.kg.module_graph.nodes[rel_path]["import_modules"] = data.get("import_modules") or []
+                        if ext == ".py":
+                            self.kg.module_graph.nodes[rel_path]["function_defs"] = data.get("function_defs") or []
+                            self.kg.module_graph.nodes[rel_path]["class_defs"] = data.get("class_defs") or []
+                            self.kg.module_graph.nodes[rel_path]["data_ops"] = data.get("data_ops") or []
                     except Exception:
                         pass
                     if trace is not None:
@@ -179,12 +193,12 @@ class Surveyor:
                                 {
                                     "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                                     "agent": "surveyor",
-                                    "action": "python_structure",
+                                    "action": "python_structure" if ext == ".py" else "js_ts_structure",
                                     "file": rel_path,
                                     "method": "static",
-                                    "confidence": 0.8,
-                                    "functions": len(data.get("functions") or []),
-                                    "classes": len(data.get("classes") or []),
+                                    "confidence": 0.8 if ext == ".py" else 0.7,
+                                    "functions": len(data.get("functions") or []) if ext == ".py" else 0,
+                                    "classes": len(data.get("classes") or []) if ext == ".py" else 0,
                                     "imports": len(data.get("import_modules") or []),
                                 }
                             )
@@ -257,6 +271,60 @@ class Surveyor:
                                 for name in names:
                                     name_parts = [p for p in str(name).split(".") if p]
                                     resolve_module(module_parts + name_parts, line_range=lr)
+                elif ext in {".js", ".jsx", ".ts", ".tsx"}:
+                    import_specs = data.get("import_modules") or []
+                    if not import_specs:
+                        continue
+
+                    rel_dir = Path(rel_path).parent
+
+                    def _try_candidates(base_no_ext: Path) -> Path | None:
+                        # If the spec includes an extension, check it directly.
+                        direct = (base_path / base_no_ext).resolve()
+                        if direct.exists() and direct.is_file():
+                            return direct
+
+                        exts = [".ts", ".tsx", ".js", ".jsx"]
+                        for e in exts:
+                            p = (base_path / base_no_ext).with_suffix(e)
+                            if p.exists():
+                                return p
+
+                        dirp = base_path / base_no_ext
+                        if dirp.exists() and dirp.is_dir():
+                            for e in exts:
+                                idx = dirp / ("index" + e)
+                                if idx.exists():
+                                    return idx
+                        return None
+
+                    for spec in import_specs:
+                        try:
+                            mod = str(spec.get("module") or "")
+                            lr = str(spec.get("line_range") or "1-1")
+                        except Exception:
+                            continue
+                        # Only connect local file-to-file imports.
+                        if not mod or not mod.startswith("."):
+                            continue
+
+                        base_no_ext = (rel_dir / mod).as_posix()
+                        resolved = _try_candidates(Path(base_no_ext))
+                        if not resolved:
+                            continue
+                        try:
+                            target_rel = str(resolved.relative_to(base_path)).replace("\\", "/")
+                        except Exception:
+                            continue
+                        self.kg.add_import_edge(
+                            ImportsEdge(
+                                source_module=rel_path,
+                                target_module=target_rel,
+                                weight=1,
+                                source_file=rel_path,
+                                line_range=lr,
+                            )
+                        )
                         
         try:
             ranks = self._pagerank_power_iteration(self.kg.module_graph)

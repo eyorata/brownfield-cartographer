@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import ast
+import re
 try:
     from tree_sitter import Language, Parser
     import tree_sitter_python
@@ -32,6 +33,56 @@ class TreeSitterAnalyzer:
     def __init__(self):
         self.router = LanguageRouter()
         self.parser = Parser() if Parser else None
+
+    def _read_text(self, file_path: str) -> str:
+        try:
+            return Path(file_path).read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            return ""
+
+    def _parse_js_imports(self, file_path: str) -> Dict[str, Any]:
+        """
+        Lightweight JS/TS import extraction (regex-based).
+
+        Returns the same shape as Python parsing for `imports` and `import_modules`
+        so Surveyor can build a module dependency graph for JS/TS repos.
+        """
+        text = self._read_text(file_path)
+        if not text:
+            return {"imports": [], "import_modules": []}
+
+        import_modules: List[Dict[str, Any]] = []
+        rx_import = re.compile(
+            r"^\s*import\s+(?:type\s+)?(?:[^;]*?\s+from\s+)?[\"'](?P<mod>[^\"']+)[\"']\s*;?\s*$"
+        )
+        rx_export_from = re.compile(r"^\s*export\s+[^;]*?\s+from\s+[\"'](?P<mod>[^\"']+)[\"']\s*;?\s*$")
+        rx_require = re.compile(r"\brequire\(\s*[\"'](?P<mod>[^\"']+)[\"']\s*\)")
+
+        for idx, line in enumerate(text.splitlines(), start=1):
+            m = rx_import.match(line)
+            if m:
+                import_modules.append({"kind": "import", "module": m.group("mod"), "line_range": f"{idx}-{idx}"})
+                continue
+            m2 = rx_export_from.match(line)
+            if m2:
+                import_modules.append(
+                    {"kind": "export_from", "module": m2.group("mod"), "line_range": f"{idx}-{idx}"}
+                )
+                continue
+            for m3 in rx_require.finditer(line):
+                import_modules.append({"kind": "require", "module": m3.group("mod"), "line_range": f"{idx}-{idx}"})
+
+        imports: List[str] = []
+        for spec in import_modules:
+            mod = str(spec.get("module") or "")
+            if not mod:
+                continue
+            if mod.startswith("."):
+                imports.append(mod)
+            else:
+                imports.append(mod.split("/", 1)[0])
+
+        return {"imports": sorted(set(imports)), "import_modules": import_modules}
 
     def _analyze_python_tree_sitter(self, file_path: str) -> Dict[str, Any]:
         parsed = self._parse(file_path)
@@ -463,6 +514,12 @@ class TreeSitterAnalyzer:
 
     def parse_python(self, file_path):
         return self.analyze_python_module(file_path)
+
+    def parse_javascript(self, file_path: str) -> Dict[str, Any]:
+        return self._parse_js_imports(file_path)
+
+    def parse_typescript(self, file_path: str) -> Dict[str, Any]:
+        return self._parse_js_imports(file_path)
 
     def parse_sql(self, file_path):
         parsed = self._parse(file_path)

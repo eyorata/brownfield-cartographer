@@ -259,6 +259,69 @@ class _JobStore:
 JOBS = _JobStore()
 
 
+def _safe_run_dir_from_id(job_id: str) -> Optional[Path]:
+    """
+    Resolve a run directory for an id.
+
+    Supports:
+    - UI-created jobs in JOBS (job_id -> job["output_dir"])
+    - Pre-existing `.cartography/ui_runs/<id>` folders created by CLI analyze --output-dir
+
+    Does not allow arbitrary filesystem paths.
+    """
+    jid = (job_id or "").strip()
+    if not jid:
+        return None
+
+    j = JOBS.get(jid)
+    if j and j.get("output_dir"):
+        try:
+            return Path(str(j["output_dir"])).resolve()
+        except Exception:
+            return None
+
+    # Treat id as folder name under ui_runs.
+    ok = True
+    for ch in jid:
+        if not (("a" <= ch <= "z") or ("A" <= ch <= "Z") or ("0" <= ch <= "9") or ch in {"-", "_"}):
+            ok = False
+            break
+    if not ok:
+        return None
+
+    cand = (_RUNS_DIR / jid).resolve()
+    try:
+        cand.relative_to(_RUNS_DIR)
+    except Exception:
+        return None
+    if cand.exists() and cand.is_dir():
+        return cand
+    return None
+
+
+def _list_ui_runs(limit: int = 50) -> List[Dict[str, Any]]:
+    _RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    items: List[Dict[str, Any]] = []
+    try:
+        dirs = [d for d in _RUNS_DIR.iterdir() if d.is_dir()]
+        dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        for d in dirs[: int(limit)]:
+            mg = d / "module_graph.json"
+            lg = d / "lineage_graph.json"
+            items.append(
+                {
+                    "id": d.name,
+                    "path": str(d),
+                    "mtime": int(d.stat().st_mtime),
+                    "has_module": mg.exists(),
+                    "has_lineage": lg.exists(),
+                }
+            )
+    except Exception:
+        return items
+    return items
+
+
 def _run_analyze_job(job_id: str) -> None:
     job = JOBS.get(job_id)
     if not job:
@@ -649,7 +712,7 @@ _GRAPH_HTML = """<!doctype html>
     <header>
       <div class="row">
         <div class="pill"><strong>Graph</strong></div>
-        <div class="pill"><label>job</label><span id="job" style="font-family: var(--mono);"></span></div>
+        <div class="pill"><label>run</label><span id="job" style="font-family: var(--mono);"></span></div>
         <div class="pill">
           <label>type</label>
           <select id="type">
@@ -657,11 +720,20 @@ _GRAPH_HTML = """<!doctype html>
             <option value="lineage">lineage</option>
           </select>
         </div>
+        <div class="pill">
+          <label>run id</label>
+          <input id="job_input" placeholder="e.g. 66cfbe61f2b6" style="width: 220px;" />
+        </div>
+        <div class="pill">
+          <label>recent</label>
+          <select id="runs" style="width: 220px;"></select>
+        </div>
         <div class="pill"><label>max nodes</label><input id="max_nodes" type="number" min="10" max="400" value="120" /></div>
         <div class="pill"><label>max edges</label><input id="max_edges" type="number" min="10" max="2000" value="600" /></div>
         <button id="load">Load</button>
         <span class="small">Drag nodes. Click a node for details.</span>
       </div>
+      <div class="small" id="err" style="padding-top:6px; color:#ffb4b4;"></div>
     </header>
     <main>
       <section class="card">
@@ -675,10 +747,15 @@ _GRAPH_HTML = """<!doctype html>
     </main>
     <script>
       const qs = new URLSearchParams(location.search);
-      const jobId = qs.get('id') || '';
+      let jobId = qs.get('id') || '';
       const initialType = qs.get('type') || 'module';
 
-      document.getElementById('job').textContent = jobId || '(none)';
+      const jobEl = document.getElementById('job');
+      const jobInput = document.getElementById('job_input');
+      const runsSel = document.getElementById('runs');
+      const errEl = document.getElementById('err');
+      jobEl.textContent = jobId || '(none)';
+      jobInput.value = jobId;
       const typeSel = document.getElementById('type');
       typeSel.value = initialType;
 
@@ -817,12 +894,16 @@ _GRAPH_HTML = """<!doctype html>
 
       async function loadGraph() {
         stopSim();
+        errEl.textContent = '';
         detailEl.textContent = '(no node selected)';
         const t = typeSel.value;
         const mn = parseInt(maxNodesInp.value || '120', 10);
         const me = parseInt(maxEdgesInp.value || '600', 10);
         const resp = await fetch(`/api/graph?id=${encodeURIComponent(jobId)}&type=${encodeURIComponent(t)}&max_nodes=${encodeURIComponent(mn)}&max_edges=${encodeURIComponent(me)}`);
         const data = await resp.json();
+        if (data && data.error) {
+          errEl.textContent = data.error + (data.path ? (' (' + data.path + ')') : '');
+        }
         nodes = (data.nodes || []).map(n => ({...n, xn: (typeof n.x === 'number' ? n.x : NaN), yn: (typeof n.y === 'number' ? n.y : NaN), x: NaN, y: NaN, userMoved: false}));
         edges = data.edges || [];
         nodeById = new Map(nodes.map(n => [n.id, n]));
@@ -831,7 +912,41 @@ _GRAPH_HTML = """<!doctype html>
         draw();
       }
 
+      function setJob(newId) {
+        jobId = (newId || '').trim();
+        jobEl.textContent = jobId || '(none)';
+        jobInput.value = jobId;
+        const u = new URL(location.href);
+        if (jobId) u.searchParams.set('id', jobId);
+        else u.searchParams.delete('id');
+        history.replaceState({}, '', u.toString());
+        loadGraph();
+      }
+
+      async function loadRuns() {
+        try {
+          const resp = await fetch('/api/runs');
+          const data = await resp.json();
+          const runs = data.runs || [];
+          const opts = ['<option value=\"\">(select)</option>'];
+          for (const r of runs) {
+            opts.push(`<option value=\"${r.id}\">${r.id}</option>`);
+          }
+          runsSel.innerHTML = opts.join('');
+          if (jobId) runsSel.value = jobId;
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      jobInput.addEventListener('keydown', (evt) => {
+        if (evt.key === 'Enter') setJob(jobInput.value);
+      });
+      runsSel.addEventListener('change', () => {
+        if (runsSel.value) setJob(runsSel.value);
+      });
       document.getElementById('load').addEventListener('click', loadGraph);
+      loadRuns();
       loadGraph();
     </script>
   </body>
@@ -943,11 +1058,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 max_edges = 600
 
-            base_dir = None
-            if job_id:
-                j = JOBS.get(job_id)
-                if j:
-                    base_dir = Path(j["output_dir"]).resolve()
+            base_dir = _safe_run_dir_from_id(job_id) if job_id else None
             if base_dir is None:
                 base_dir = _CARTO_DIR
 
@@ -968,6 +1079,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(trimmed, status=200)
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
+            return
+
+        if parsed.path == "/api/runs":
+            qs = parse_qs(parsed.query or "")
+            try:
+                limit = int((qs.get("limit") or ["50"])[0])
+            except Exception:
+                limit = 50
+            self._send_json({"runs": _list_ui_runs(limit=limit)}, status=200)
             return
 
         self._send_json({"error": "not found"}, status=404)
